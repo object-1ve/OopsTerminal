@@ -1,0 +1,129 @@
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-panel {
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 20px 24px;
+  color: var(--text);
+}
+
+.settings-title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  color: var(--text-h);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.settings-label {
+  width: 120px;
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.shortcut-box {
+  flex: 1;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  font-family: var(--mono);
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.shortcut-box:hover {
+  border-color: var(--accent-border);
+}
+
+.shortcut-box.recording {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+
+.shortcut-clear {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.shortcut-clear:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-hint {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.8;
+  margin: 4px 0 12px;
+}
+
+.settings-error {
+  font-size: 12px;
+  color: #e81123;
+  margin: 0 0 12px;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-btn {
+  height: 30px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.settings-btn:hover {
+  background-color: var(--accent-bg);
+}
+
+.settings-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.settings-btn.primary:hover {
+  background: var(--accent-border);
+}
+
+.settings-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

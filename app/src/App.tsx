@@ -1,124 +1,69 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useCallback, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { TitleBar } from './components/TitleBar'
+import { SettingsModal } from './components/SettingsModal'
+import { TabBar, type Tab } from './components/TabBar'
+import { TerminalView } from './components/TerminalView'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  const keySeq = useRef(1)
+  const [tabs, setTabs] = useState<Tab[]>([{ key: 1, sessionId: null }])
+  const [activeKey, setActiveKey] = useState<number>(1)
+
+  const addTab = useCallback(() => {
+    keySeq.current += 1
+    const key = keySeq.current
+    setTabs((t) => [...t, { key, sessionId: null }])
+    setActiveKey(key)
+  }, [])
+
+  const closeTab = useCallback(
+    (key: number) => {
+      const tab = tabs.find((x) => x.key === key)
+      if (tab?.sessionId != null) {
+        invoke('kill_terminal', { id: tab.sessionId }).catch(() => {})
+      }
+      const remaining = tabs.filter((x) => x.key !== key)
+      setTabs(remaining)
+      if (activeKey === key) {
+        setActiveKey(remaining.length ? remaining[remaining.length - 1].key : 0)
+      }
+    },
+    [tabs, activeKey],
+  )
+
+  const handleSessionId = useCallback((key: number) => {
+    return (sessionId: number) => {
+      setTabs((t) => t.map((x) => (x.key === key ? { ...x, sessionId } : x)))
+    }
+  }, [])
 
   return (
-    <>
-      <TitleBar />
-      <div className="main-content">
-        <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+    <div className="app-shell">
+      <TitleBar onOpenSettings={() => setSettingsOpen(true)} />
+      <TabBar
+        tabs={tabs}
+        activeKey={activeKey}
+        onSelect={setActiveKey}
+        onClose={closeTab}
+        onAdd={addTab}
+      />
+      <div className="terminal-area">
+        {tabs.map((tab) => (
+          <div
+            key={tab.key}
+            className={`terminal-pane ${tab.key === activeKey ? '' : 'hidden'}`}
+          >
+            <TerminalView active={tab.key === activeKey} onSessionId={handleSessionId(tab.key)} />
+          </div>
+        ))}
+        {tabs.length === 0 && <div className="terminal-empty">点击 + 新建终端</div>}
       </div>
-    </>
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </div>
   )
 }
 

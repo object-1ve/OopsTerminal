@@ -1,18 +1,18 @@
 mod db;
+mod shortcuts;
+mod terminal;
 
-use db::{init_db, load_window_state, save_window_state, WindowState};
+use db::{init_db, load_settings, load_window_state, save_window_state, WindowState};
+use shortcuts::SettingsState;
 use std::sync::Mutex;
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
-};
+use tauri::Manager;
 
 pub struct DbState(Mutex<rusqlite::Connection>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // 初始化数据库路径
             let app_data_dir = app
@@ -40,7 +40,18 @@ pub fn run() {
                 }
             }
 
+            // 加载设置并注册全局快捷键
+            let settings = load_settings(&conn).unwrap_or(db::Settings {
+                toggle_window_shortcut: None,
+                quit_shortcut: None,
+            });
+
             app.manage(DbState(Mutex::new(conn)));
+
+            let app_handle = app.handle();
+            shortcuts::init_shortcuts(app_handle, &settings);
+            app.manage(SettingsState(Mutex::new(settings)));
+            app.manage(terminal::TerminalManager::default());
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -50,43 +61,22 @@ pub fn run() {
                 )?;
             }
 
-            // 创建托盘菜单
-            let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+            // 隐藏任务栏图标:强制 WS_EX_TOOLWINDOW 扩展样式(与模板 OopsInterview 一致)
+            #[cfg(target_os = "windows")]
+            {
+                use windows::Win32::UI::WindowsAndMessaging::{
+                    GetWindowLongW, SetWindowLongW, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
+                };
 
-            // 创建托盘图标
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "quit" => {
-                        app.exit(0);
-                    }
-                    "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Ok(hwnd) = window.hwnd() {
+                        unsafe {
+                            let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                            SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | (WS_EX_TOOLWINDOW.0 as i32));
                         }
                     }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                })
-                .build(app)?;
+                }
+            }
 
             Ok(())
         })
@@ -114,6 +104,14 @@ pub fn run() {
             }
             _ => {}
         })
+        .invoke_handler(tauri::generate_handler![
+            shortcuts::get_settings,
+            shortcuts::set_shortcut,
+            terminal::create_terminal,
+            terminal::write_terminal,
+            terminal::resize_terminal,
+            terminal::kill_terminal,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

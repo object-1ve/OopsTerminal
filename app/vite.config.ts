@@ -7,5 +7,9 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    watch: {
+      // Cargo writes into src-tauri/target; watching it crashes Vite with EBUSY.
+      ignored: ['**/src-tauri/**'],
+    },
   },
 })

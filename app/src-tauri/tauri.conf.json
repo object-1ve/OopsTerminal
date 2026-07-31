@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "oopsTemplate",
-  "version": "0.1.0",
-  "identifier": "oopsTemplate",
+  "productName": "OopsTerminal",
+  "version": "0.1.1",
+  "identifier": "com.oops.terminal",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -13,12 +13,13 @@
     "windows": [
       {
         "label": "main",
-        "title": "OopsAssistant",
+        "title": "OopsTerminal",
         "width": 800,
         "height": 600,
         "resizable": true,
         "fullscreen": false,
-        "decorations": false
+        "decorations": false,
+        "skipTaskbar": true
       }
     ],
     "security": {

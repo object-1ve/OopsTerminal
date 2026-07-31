@@ -39,6 +39,15 @@
   background-color: #e81123;
 }
 
+.titlebar-button#titlebar-pin.active {
+  background-color: var(--accent-bg);
+}
+
+.titlebar-button#titlebar-pin.active svg path {
+  stroke: var(--accent);
+  fill: var(--accent);
+}
+
 .titlebar-button svg path,
 .titlebar-button svg rect {
   stroke: var(--text-h);
