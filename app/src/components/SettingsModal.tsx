@@ -5,6 +5,7 @@ import "./SettingsModal.css";
 type Settings = {
   toggle_window_shortcut: string | null;
   quit_shortcut: string | null;
+  default_path: string | null;
 };
 
 type ShortcutKey = "toggle_window_shortcut" | "quit_shortcut";
@@ -44,6 +45,7 @@ export const SettingsModal = ({
 }) => {
   const [toggleShortcut, setToggleShortcut] = useState<string | null>(null);
   const [quitShortcut, setQuitShortcut] = useState<string | null>(null);
+  const [defaultPath, setDefaultPath] = useState("");
   const [recording, setRecording] = useState<ShortcutKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -56,6 +58,7 @@ export const SettingsModal = ({
       .then((s) => {
         setToggleShortcut(s.toggle_window_shortcut);
         setQuitShortcut(s.quit_shortcut);
+        setDefaultPath(s.default_path ?? "");
       })
       .catch(() => setError("无法读取设置"));
   }, [open]);
@@ -83,6 +86,9 @@ export const SettingsModal = ({
     try {
       await invoke("set_shortcut", { kind: "toggle", accel: toggleShortcut });
       await invoke("set_shortcut", { kind: "quit", accel: quitShortcut });
+      await invoke("set_default_path", {
+        path: defaultPath.trim() || null,
+      });
       onClose();
     } catch (e) {
       setError(String(e));
@@ -140,8 +146,26 @@ export const SettingsModal = ({
           </button>
         </div>
 
+        <div className="settings-row">
+          <div className="settings-label">终端默认启动路径</div>
+          <input
+            type="text"
+            className="settings-path-input"
+            placeholder="例如 C:\Users\yourname"
+            value={defaultPath}
+            onChange={(e) => setDefaultPath(e.target.value)}
+          />
+          <button
+            type="button"
+            className="shortcut-clear"
+            onClick={() => setDefaultPath("")}
+          >
+            清除
+          </button>
+        </div>
+
         <p className="settings-hint">
-          点击输入框后按下组合键（如 Ctrl+Shift+K）。显示/隐藏快捷键可切换窗口显隐，留空表示禁用。
+          点击输入框后按下组合键（如 Ctrl+Shift+K）。显示/隐藏快捷键可切换窗口显隐，留空表示禁用。默认启动路径留空表示使用用户主目录。
         </p>
 
         {error && <p className="settings-error">{error}</p>}

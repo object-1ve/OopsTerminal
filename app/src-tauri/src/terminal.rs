@@ -53,10 +53,37 @@ fn default_shell() -> String {
     }
 }
 
+/// 解析终端默认工作目录:使用设置值,未设置时回退到用户主目录。
+fn default_cwd(settings: &crate::shortcuts::SettingsState) -> std::path::PathBuf {
+    let configured = settings
+        .0
+        .lock()
+        .unwrap()
+        .default_path
+        .clone()
+        .filter(|p| !p.trim().is_empty());
+
+    if let Some(path) = configured {
+        let pb = std::path::PathBuf::from(path);
+        if pb.exists() && pb.is_dir() {
+            return pb;
+        }
+    }
+
+    if let Some(home) = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from)
+    {
+        return home;
+    }
+    std::env::current_dir().unwrap_or_default()
+}
+
 #[tauri::command]
 pub fn create_terminal(
     app: AppHandle,
     state: State<'_, TerminalManager>,
+    settings: State<'_, crate::shortcuts::SettingsState>,
 ) -> Result<u32, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -68,7 +95,8 @@ pub fn create_terminal(
         })
         .map_err(|e| format!("打开 PTY 失败: {e}"))?;
 
-    let cmd = CommandBuilder::new(default_shell());
+    let mut cmd = CommandBuilder::new(default_shell());
+    cmd.cwd(default_cwd(&settings));
     let child = pair
         .slave
         .spawn_command(cmd)

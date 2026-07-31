@@ -171,6 +171,29 @@ pub fn set_shortcut(
     Ok(guard.clone())
 }
 
+/// 保存终端默认启动路径。传 None 或空字符串表示使用用户主目录。
+#[tauri::command]
+pub fn set_default_path(
+    app: AppHandle,
+    state: tauri::State<'_, SettingsState>,
+    path: Option<String>,
+) -> Result<db::Settings, String> {
+    let path = path
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let mut guard = state.0.lock().unwrap();
+    if guard.default_path != path {
+        let db_state = app.state::<crate::DbState>();
+        let conn = db_state.0.lock().unwrap();
+        db::save_setting(&conn, "default_path", path.as_deref())
+            .map_err(|e| format!("保存设置失败: {e}"))?;
+        guard.default_path = path;
+    }
+
+    Ok(guard.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

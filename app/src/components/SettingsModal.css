@@ -78,6 +78,23 @@
   cursor: default;
 }
 
+.settings-path-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.settings-path-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .settings-hint {
   font-size: 12px;
   color: var(--text);

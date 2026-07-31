@@ -2,7 +2,7 @@ mod db;
 mod shortcuts;
 mod terminal;
 
-use db::{init_db, load_settings, load_window_state, save_window_state, WindowState};
+use db::{init_db, load_settings};
 use shortcuts::SettingsState;
 use std::sync::Mutex;
 use tauri::Manager;
@@ -25,25 +25,16 @@ pub fn run() {
 
             let conn = init_db(app_data_dir).expect("failed to initialize database");
 
-            // 尝试加载上次保存的窗口状态
-            if let Ok(Some(state)) = load_window_state(&conn) {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-                        width: state.width as u32,
-                        height: state.height as u32,
-                    }));
-                    let _ =
-                        window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                            x: state.x,
-                            y: state.y,
-                        }));
-                }
+            // 每次启动窗口居中显示,不记忆上次的位置与大小
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.center();
             }
 
             // 加载设置并注册全局快捷键
             let settings = load_settings(&conn).unwrap_or(db::Settings {
                 toggle_window_shortcut: None,
                 quit_shortcut: None,
+                default_path: None,
             });
 
             app.manage(DbState(Mutex::new(conn)));
@@ -85,28 +76,12 @@ pub fn run() {
                 window.hide().unwrap();
                 api.prevent_close();
             }
-            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
-                let app = window.app_handle();
-                if let Some(db_state) = app.try_state::<DbState>() {
-                    let conn = db_state.0.lock().unwrap();
-                    let size = window.inner_size().unwrap();
-                    let pos = window.outer_position().unwrap();
-
-                    let state = WindowState {
-                        width: size.width as f64,
-                        height: size.height as f64,
-                        x: pos.x,
-                        y: pos.y,
-                    };
-
-                    let _ = save_window_state(&conn, &state);
-                }
-            }
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             shortcuts::get_settings,
             shortcuts::set_shortcut,
+            shortcuts::set_default_path,
             terminal::create_terminal,
             terminal::write_terminal,
             terminal::resize_terminal,
