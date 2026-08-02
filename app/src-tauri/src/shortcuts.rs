@@ -8,7 +8,7 @@ use tauri_plugin_global_shortcut::{
 /// Runtime view of user settings, kept in sync with the database.
 pub struct SettingsState(pub Mutex<db::Settings>);
 
-fn toggle_main_window(app: &AppHandle) {
+pub fn toggle_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         #[cfg(target_os = "windows")]
         {
@@ -39,12 +39,20 @@ fn toggle_main_window(app: &AppHandle) {
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_HIDEWINDOW,
                     );
                 } else {
+                    // 仅在隐藏任务栏图标时强制 WS_EX_TOOLWINDOW,否则让窗口出现在任务栏
+                    let show_taskbar = app
+                        .state::<SettingsState>()
+                        .0
+                        .lock()
+                        .unwrap()
+                        .show_taskbar_icon;
                     let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-                    SetWindowLongW(
-                        hwnd,
-                        GWL_EXSTYLE,
-                        ex_style | (WS_EX_TOOLWINDOW.0 as i32),
-                    );
+                    let updated = if show_taskbar {
+                        ex_style & !(WS_EX_TOOLWINDOW.0 as i32)
+                    } else {
+                        ex_style | (WS_EX_TOOLWINDOW.0 as i32)
+                    };
+                    SetWindowLongW(hwnd, GWL_EXSTYLE, updated);
                     // 尊重用户的置顶设置,而不是无条件置顶
                     let insert_after = if window.is_always_on_top().unwrap_or(false) {
                         Some(HWND_TOPMOST)

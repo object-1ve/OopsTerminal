@@ -95,6 +95,57 @@
   border-color: var(--accent);
 }
 
+.settings-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.settings-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: var(--border);
+  transition: background-color 0.2s;
+}
+
+.settings-slider::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 2px;
+  top: 2px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.settings-switch input:checked + .settings-slider {
+  background: var(--accent);
+}
+
+.settings-switch input:checked + .settings-slider::before {
+  transform: translateX(18px);
+}
+
+.settings-switch-value {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
 .settings-hint {
   font-size: 12px;
   color: var(--text);

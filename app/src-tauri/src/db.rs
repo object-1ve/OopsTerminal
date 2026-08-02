@@ -6,6 +6,8 @@ pub struct Settings {
     pub toggle_window_shortcut: Option<String>,
     pub quit_shortcut: Option<String>,
     pub default_path: Option<String>,
+    pub show_tray_icon: bool,
+    pub show_taskbar_icon: bool,
 }
 
 pub fn init_db(app_dir: PathBuf) -> Result<Connection> {
@@ -28,7 +30,16 @@ pub fn load_settings(conn: &Connection) -> Result<Settings> {
         toggle_window_shortcut: load_setting(conn, "toggle_window_shortcut")?,
         quit_shortcut: load_setting(conn, "quit_shortcut")?,
         default_path: load_setting(conn, "default_path")?,
+        show_tray_icon: load_bool(conn, "show_tray_icon", true)?,
+        show_taskbar_icon: load_bool(conn, "show_taskbar_icon", false)?,
     })
+}
+
+fn load_bool(conn: &Connection, key: &str, default: bool) -> Result<bool> {
+    match load_setting(conn, key)? {
+        Some(v) => Ok(v == "true"),
+        None => Ok(default),
+    }
 }
 
 fn load_setting(conn: &Connection, key: &str) -> Result<Option<String>> {

@@ -1,6 +1,7 @@
 mod db;
 mod shortcuts;
 mod terminal;
+mod ui;
 
 use db::{init_db, load_settings};
 use shortcuts::SettingsState;
@@ -35,9 +36,12 @@ pub fn run() {
                 toggle_window_shortcut: None,
                 quit_shortcut: None,
                 default_path: None,
+                show_tray_icon: true,
+                show_taskbar_icon: false,
             });
 
             app.manage(DbState(Mutex::new(conn)));
+            app.manage(ui::TrayState(Mutex::new(None)));
 
             let app_handle = app.handle();
             shortcuts::init_shortcuts(app_handle, &settings);
@@ -52,22 +56,10 @@ pub fn run() {
                 )?;
             }
 
-            // 隐藏任务栏图标:强制 WS_EX_TOOLWINDOW 扩展样式(与模板 OopsInterview 一致)
-            #[cfg(target_os = "windows")]
-            {
-                use windows::Win32::UI::WindowsAndMessaging::{
-                    GetWindowLongW, SetWindowLongW, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
-                };
-
-                if let Some(window) = app.get_webview_window("main") {
-                    if let Ok(hwnd) = window.hwnd() {
-                        unsafe {
-                            let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-                            SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | (WS_EX_TOOLWINDOW.0 as i32));
-                        }
-                    }
-                }
-            }
+            // 根据设置应用托盘图标与任务栏图标的显示状态
+            let settings_state = app.state::<SettingsState>();
+            let settings_ref = settings_state.0.lock().unwrap().clone();
+            ui::apply_ui_settings(&app_handle, &settings_ref);
 
             Ok(())
         })
@@ -82,6 +74,7 @@ pub fn run() {
             shortcuts::get_settings,
             shortcuts::set_shortcut,
             shortcuts::set_default_path,
+            ui::set_ui_settings,
             terminal::create_terminal,
             terminal::write_terminal,
             terminal::resize_terminal,

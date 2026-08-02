@@ -6,6 +6,8 @@ type Settings = {
   toggle_window_shortcut: string | null;
   quit_shortcut: string | null;
   default_path: string | null;
+  show_tray_icon: boolean;
+  show_taskbar_icon: boolean;
 };
 
 type ShortcutKey = "toggle_window_shortcut" | "quit_shortcut";
@@ -46,6 +48,8 @@ export const SettingsModal = ({
   const [toggleShortcut, setToggleShortcut] = useState<string | null>(null);
   const [quitShortcut, setQuitShortcut] = useState<string | null>(null);
   const [defaultPath, setDefaultPath] = useState("");
+  const [showTrayIcon, setShowTrayIcon] = useState(true);
+  const [showTaskbarIcon, setShowTaskbarIcon] = useState(false);
   const [recording, setRecording] = useState<ShortcutKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -59,6 +63,8 @@ export const SettingsModal = ({
         setToggleShortcut(s.toggle_window_shortcut);
         setQuitShortcut(s.quit_shortcut);
         setDefaultPath(s.default_path ?? "");
+        setShowTrayIcon(s.show_tray_icon);
+        setShowTaskbarIcon(s.show_taskbar_icon);
       })
       .catch(() => setError("无法读取设置"));
   }, [open]);
@@ -88,6 +94,10 @@ export const SettingsModal = ({
       await invoke("set_shortcut", { kind: "quit", accel: quitShortcut });
       await invoke("set_default_path", {
         path: defaultPath.trim() || null,
+      });
+      await invoke("set_ui_settings", {
+        showTrayIcon,
+        showTaskbarIcon,
       });
       onClose();
     } catch (e) {
@@ -162,6 +172,34 @@ export const SettingsModal = ({
           >
             清除
           </button>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-label">显示托盘图标</div>
+          <label className="settings-switch">
+            <input
+              type="checkbox"
+              checked={showTrayIcon}
+              onChange={(e) => setShowTrayIcon(e.target.checked)}
+            />
+            <span className="settings-slider" />
+          </label>
+          <span className="settings-switch-value">{showTrayIcon ? "显示" : "隐藏"}</span>
+        </div>
+
+        <div className="settings-row">
+          <div className="settings-label">显示任务栏图标</div>
+          <label className="settings-switch">
+            <input
+              type="checkbox"
+              checked={showTaskbarIcon}
+              onChange={(e) => setShowTaskbarIcon(e.target.checked)}
+            />
+            <span className="settings-slider" />
+          </label>
+          <span className="settings-switch-value">
+            {showTaskbarIcon ? "显示" : "隐藏"}
+          </span>
         </div>
 
         <p className="settings-hint">
