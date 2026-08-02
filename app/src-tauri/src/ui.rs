@@ -49,12 +49,15 @@ fn apply_taskbar_style(app: &AppHandle, show: bool) {
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetWindowLongW, SetWindowLongW, GWL_EXSTYLE, WS_EX_TOOLWINDOW,
+            GetWindowLongW, IsWindowVisible, SetWindowLongW, SetWindowPos, ShowWindow,
+            GWL_EXSTYLE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
+            SW_HIDE, SW_SHOW, WS_EX_TOOLWINDOW,
         };
 
         if let Some(window) = app.get_webview_window("main") {
             if let Ok(hwnd) = window.hwnd() {
                 unsafe {
+                    let was_visible = IsWindowVisible(hwnd).as_bool();
                     let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
                     let updated = if show {
                         ex_style & !(WS_EX_TOOLWINDOW.0 as i32)
@@ -62,6 +65,21 @@ fn apply_taskbar_style(app: &AppHandle, show: bool) {
                         ex_style | (WS_EX_TOOLWINDOW.0 as i32)
                     };
                     SetWindowLongW(hwnd, GWL_EXSTYLE, updated);
+
+                    if was_visible {
+                        // 重新显示窗口,强制任务栏按新样式重新评估,立即隐藏/显示任务栏按钮。
+                        let _ = ShowWindow(hwnd, SW_HIDE);
+                        let _ = SetWindowPos(
+                            hwnd,
+                            None,
+                            0,
+                            0,
+                            0,
+                            0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                        );
+                        let _ = ShowWindow(hwnd, SW_SHOW);
+                    }
                 }
             }
         }
