@@ -158,9 +158,13 @@ jobs:
         run: ls -lhR dist
         working-directory: ${{ github.workspace }}
 
-      # Release notes are auto-generated from merged PRs/commits. If you
-      # prefer a curated CHANGELOG.md, create one at the repo root and swap
-      # `generate_release_notes` for `body_path: CHANGELOG.md`.
+      # 发布正文取自仓库根目录 CHANGELOG.md:先运行脚本把当前版本对应的章节
+      # 提取到临时文件,再用 body_path 指定。每次发版只需在 CHANGELOG.md 顶部
+      # 「## [Unreleased]」下新增当前版本的记录。
+      - name: Generate release body from CHANGELOG.md
+        run: node ${{ github.workspace }}/.github/scripts/release-body.mjs ${{ github.ref_name }} ${{ github.workspace }}/release_body.md
+        working-directory: ${{ github.workspace }}
+
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v3
         with:
@@ -169,6 +173,6 @@ jobs:
           files: |
             dist/windows/*.msi
             dist/macos/*.dmg
-          generate_release_notes: true
+          body_path: ${{ github.workspace }}/release_body.md
           make_latest: true
           fail_on_unmatched_files: false
