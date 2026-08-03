@@ -35,10 +35,6 @@
   background-color: var(--accent-bg);
 }
 
-.titlebar-button#titlebar-close:hover {
-  background-color: #e81123;
-}
-
 .titlebar-button#titlebar-pin.active {
   background-color: var(--accent-bg);
 }
@@ -54,7 +50,3 @@
   fill: var(--text-h);
 }
 
-.titlebar-button#titlebar-close:hover svg path {
-  stroke: #ffffff;
-  fill: #ffffff;
-}

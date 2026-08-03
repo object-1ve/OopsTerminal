@@ -59,11 +59,6 @@ export const TitleBar = ({ onOpenSettings }: { onOpenSettings: () => void }) => 
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
       </div>
-      <div className="titlebar-button" id="titlebar-minimize" onClick={() => appWindow.minimize()}>
-        <svg width="10" height="1" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="10" height="1" />
-        </svg>
-      </div>
       <div className="titlebar-button" id="titlebar-maximize" onClick={() => appWindow.toggleMaximize()}>
         {isMaximized ? (
           <svg width="10" height="10" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg">
@@ -75,10 +70,9 @@ export const TitleBar = ({ onOpenSettings }: { onOpenSettings: () => void }) => 
           </svg>
         )}
       </div>
-      <div className="titlebar-button" id="titlebar-close" onClick={() => appWindow.close()}>
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 1L9 9" strokeWidth="1" />
-          <path d="M9 1L1 9" strokeWidth="1" />
+      <div className="titlebar-button" id="titlebar-minimize" onClick={() => appWindow.minimize()}>
+        <svg width="10" height="1" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="10" height="1" />
         </svg>
       </div>
     </div>
