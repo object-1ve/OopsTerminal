@@ -17,9 +17,16 @@ pub fn show_main_window(app: &AppHandle) {
             // 避免任务栏残留图标,仅在隐藏任务栏图标时强制 WS_EX_TOOLWINDOW。
             use windows::Win32::UI::WindowsAndMessaging::{
                 GetWindowLongW, SetWindowLongW, SetWindowPos, GWL_EXSTYLE, HWND_NOTOPMOST,
-                HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
-                WS_EX_TOOLWINDOW,
+                HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_TOOLWINDOW,
             };
+
+            // 关键:必须先通过 tauri/tao 更新 VISIBLE 状态,不能用 SetWindowPos
+            // 直接显示。否则 tao 的 window_flags 里 VISIBLE 仍为 false,之后任何
+            // flags 操作(如最大化/还原)都会触发 apply_diff 里的
+            // `!new.contains(VISIBLE) => ShowWindow(SW_HIDE)`,把窗口重新隐藏
+            // (用户看到的表现就是"最小化")。
+            let _ = window.unminimize();
+            let _ = window.show();
 
             let hwnd = match window.hwnd() {
                 Ok(h) => h,
@@ -54,7 +61,7 @@ pub fn show_main_window(app: &AppHandle) {
                     0,
                     0,
                     0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
                 );
                 let _ = window.set_focus();
             }
@@ -71,32 +78,14 @@ pub fn toggle_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         #[cfg(target_os = "windows")]
         {
-            use windows::Win32::Foundation::HWND;
-            use windows::Win32::UI::WindowsAndMessaging::{
-                IsIconic, IsWindowVisible, SetWindowPos, SWP_HIDEWINDOW, SWP_NOACTIVATE,
-                SWP_NOMOVE, SWP_NOSIZE,
-            };
-
-            let hwnd = match window.hwnd() {
-                Ok(h) => h,
-                Err(_) => return,
-            };
-
-            unsafe {
-                let visible = IsWindowVisible(hwnd).as_bool() && !IsIconic(hwnd).as_bool();
-                if visible {
-                    let _ = SetWindowPos(
-                        hwnd,
-                        Some(HWND(std::ptr::null_mut())),
-                        0,
-                        0,
-                        0,
-                        0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_HIDEWINDOW,
-                    );
-                } else {
-                    show_main_window(app);
-                }
+            // 统一走 tauri 的 hide/show,保证 tao 的 VISIBLE flag 与真实窗口
+            // 状态同步,避免后续最大化/还原操作触发 SW_HIDE。
+            let visible = window.is_visible().unwrap_or(false)
+                && !window.is_minimized().unwrap_or(false);
+            if visible {
+                let _ = window.hide();
+            } else {
+                show_main_window(app);
             }
         }
         #[cfg(not(target_os = "windows"))]
