@@ -47,21 +47,50 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   });
 }
 
+/** 字体解析结果。 */
+type FontResolve = {
+  /** 实际应用到终端的 font-family 值。 */
+  font: string;
+  /** 是否成功应用了自定义字体。 */
+  applied: boolean;
+  /** 结果说明(ok / no-path / timeout / error)。 */
+  reason: string;
+};
+
+const FONT_RESULT_FALLBACK: FontResolve = {
+  font: DEFAULT_FONT,
+  applied: false,
+  reason: "timeout",
+};
+
 /**
  * 读取设置中的终端字体文件路径并加载为自定义字体。
  * 未设置路径时返回默认字体;文件读取/解析失败时回退默认字体。
  */
-async function resolveTerminalFont(): Promise<string> {
-  const s = await invoke<Settings>("get_settings");
-  const path = s.terminal_font_path?.trim();
-  if (!path) return DEFAULT_FONT;
+async function resolveTerminalFont(): Promise<FontResolve> {
+  try {
+    const s = await invoke<Settings>("get_settings");
+    const path = s.terminal_font_path?.trim();
+    if (!path) {
+      console.log("[TerminalFont] 未设置字体路径,使用默认字体");
+      return { font: DEFAULT_FONT, applied: false, reason: "no-path" };
+    }
 
-  // 通过自定义协议加载,不经 IPC 传大文件;加载超时/失败回退默认字体
-  const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${fontUrl(path)})`);
-  const loaded = await withTimeout(face.load(), FONT_LOAD_TIMEOUT, null);
-  if (!loaded) return DEFAULT_FONT;
-  document.fonts.add(loaded);
-  return `"${CUSTOM_FONT_FAMILY}", ${DEFAULT_FONT}`;
+    console.log("[TerminalFont] 开始加载字体文件:", path);
+    // 通过自定义协议加载,不经 IPC 传大文件;加载超时/失败回退默认字体
+    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${fontUrl(path)})`);
+    const loaded = await withTimeout(face.load(), FONT_LOAD_TIMEOUT, null);
+    if (!loaded) {
+      console.warn("[TerminalFont] 字体加载超时或失败,回退默认字体:", path);
+      return { font: DEFAULT_FONT, applied: false, reason: "timeout" };
+    }
+    document.fonts.add(loaded);
+    console.log("[TerminalFont] 字体加载成功:", path);
+    return { font: `"${CUSTOM_FONT_FAMILY}", ${DEFAULT_FONT}`, applied: true, reason: "ok" };
+  } catch (e) {
+    console.warn("[TerminalFont] 读取设置失败,使用默认字体:", e);
+    return { font: DEFAULT_FONT, applied: false, reason: "error" };
+  }
 }
 
 /** 应用字体到终端,并在字体变化后重新 fit、同步 PTY 尺寸。 */
@@ -70,15 +99,23 @@ function applyTerminalFont(
   fit: FitAddon,
   font: string,
   doResize: () => void,
+  result: FontResolve,
 ): void {
   if (term.options.fontFamily !== font) {
     term.options.fontFamily = font;
+    console.log(
+      `[TerminalFont] 终端字体已应用: ${result.applied ? "自定义字体" : "默认字体"} (${result.reason})`,
+    );
     try {
       fit.fit();
       doResize();
     } catch {
       /* 容器隐藏时忽略 */
     }
+  } else {
+    console.log(
+      `[TerminalFont] 字体未变化,保持当前字体 (${result.reason})`,
+    );
   }
 }
 
@@ -131,8 +168,8 @@ export const TerminalView = ({
     };
 
     // 应用设置中的字体(异步读取,先于/晚于终端创建都安全)
-    withTimeout(resolveTerminalFont(), FONT_LOAD_TIMEOUT, DEFAULT_FONT).then((font) => {
-      if (!disposed) applyTerminalFont(term, fit, font, doResize);
+    withTimeout(resolveTerminalFont(), FONT_LOAD_TIMEOUT, FONT_RESULT_FALLBACK).then((result) => {
+      if (!disposed) applyTerminalFont(term, fit, result.font, doResize, result);
     });
 
     // 先挂监听再创建会话,避免错过启动输出
@@ -208,8 +245,8 @@ export const TerminalView = ({
         return;
       }
       unSettingsChanged = un;
-      withTimeout(resolveTerminalFont(), FONT_LOAD_TIMEOUT, DEFAULT_FONT).then((font) => {
-        if (!disposed) applyTerminalFont(term, fit, font, doResize);
+      withTimeout(resolveTerminalFont(), FONT_LOAD_TIMEOUT, FONT_RESULT_FALLBACK).then((result) => {
+        if (!disposed) applyTerminalFont(term, fit, result.font, doResize, result);
       });
     });
 

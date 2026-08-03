@@ -15,6 +15,47 @@ type Settings = {
 type ShortcutKey = "toggle_window_shortcut" | "quit_shortcut";
 
 const MODIFIER_ONLY = new Set(["Control", "Alt", "Shift", "Meta"]);
+const CUSTOM_FONT_FAMILY = "OopsTerminalCustomFont";
+const FONT_LOAD_TIMEOUT = 8000;
+
+/** 把路径编码为 font:// 协议 URL(与 TerminalView 一致)。 */
+function fontUrl(path: string): string {
+  const bytes = new TextEncoder().encode(path);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `font://localhost/${b64}`;
+}
+
+/** 给 Promise 加超时。 */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
+/** 尝试加载字体文件,返回错误信息(空字符串表示成功)。 */
+async function verifyFontFile(path: string): Promise<string> {
+  try {
+    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${fontUrl(path)})`);
+    const loaded = await withTimeout(face.load(), FONT_LOAD_TIMEOUT, null);
+    if (!loaded) return "字体加载超时,文件可能不存在或格式不受支持";
+    document.fonts.add(loaded);
+    return "";
+  } catch (e) {
+    return `字体加载失败: ${String(e)}`;
+  }
+}
 
 /** Build a tauri-compatible accelerator string, or null for unsupported keys. */
 function buildAccelerator(e: KeyboardEvent): string | null {
@@ -55,6 +96,7 @@ export const SettingsModal = ({
   const [terminalFontPath, setTerminalFontPath] = useState("");
   const [recording, setRecording] = useState<ShortcutKey | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fontMessage, setFontMessage] = useState<{ ok: boolean; msg: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -63,6 +105,7 @@ export const SettingsModal = ({
       .then((s) => {
         setRecording(null);
         setError(null);
+        setFontMessage(null);
         setToggleShortcut(s.toggle_window_shortcut);
         setQuitShortcut(s.quit_shortcut);
         setDefaultPath(s.default_path ?? "");
@@ -93,6 +136,7 @@ export const SettingsModal = ({
   const save = async () => {
     setSaving(true);
     setError(null);
+    setFontMessage(null);
     try {
       await invoke("set_shortcut", { kind: "toggle", accel: toggleShortcut });
       await invoke("set_shortcut", { kind: "quit", accel: quitShortcut });
@@ -103,10 +147,25 @@ export const SettingsModal = ({
         showTrayIcon,
         showTaskbarIcon,
       });
+      const fontPath = terminalFontPath.trim();
       await invoke("set_terminal_font_path", {
-        path: terminalFontPath.trim() || null,
+        path: fontPath || null,
       });
-      onClose();
+
+      // 验证字体文件能否加载,把结果反馈给用户
+      if (fontPath) {
+        const err = await verifyFontFile(fontPath);
+        if (err) {
+          console.warn("[TerminalFont] 设置界面验证失败:", err);
+          setFontMessage({ ok: false, msg: `字体路径已保存,但${err},终端将使用默认字体` });
+        } else {
+          console.log("[TerminalFont] 设置界面验证成功:", fontPath);
+          setFontMessage({ ok: true, msg: `字体已应用成功: ${fontPath}` });
+        }
+      } else {
+        console.log("[TerminalFont] 已恢复默认字体");
+        setFontMessage({ ok: true, msg: "已恢复默认字体" });
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -249,6 +308,11 @@ export const SettingsModal = ({
         </p>
 
         {error && <p className="settings-error">{error}</p>}
+        {fontMessage && (
+          <p className={fontMessage.ok ? "settings-message ok" : "settings-message err"}>
+            {fontMessage.msg}
+          </p>
+        )}
 
         <div className="settings-actions">
           <button type="button" className="settings-btn" onClick={onClose}>

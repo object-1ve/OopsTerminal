@@ -159,6 +159,20 @@
   margin: 0 0 12px;
 }
 
+.settings-message {
+  font-size: 12px;
+  margin: 0 0 12px;
+  word-break: break-all;
+}
+
+.settings-message.ok {
+  color: #16a34a;
+}
+
+.settings-message.err {
+  color: #e81123;
+}
+
 .settings-actions {
   display: flex;
   justify-content: flex-end;
