@@ -21,15 +21,16 @@ export const TerminalView = ({
   const fitRef = useRef<FitAddon | null>(null);
   const sessionIdRef = useRef<number | null>(null);
   const onSessionIdRef = useRef(onSessionId);
-  onSessionIdRef.current = onSessionId;
+  useEffect(() => {
+    onSessionIdRef.current = onSessionId;
+  }, [onSessionId]);
 
   useEffect(() => {
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
-      // 网格由排第一的字体测量,故必须用自洽的等宽字体 (中文=2×西文)。
-      // 若让 Cascadia 排第一,网格按它 8.2px 西文算,中文永远对不齐(见调查)。
-      fontFamily: '"Sarasa Mono SC", "Cascadia Mono", Consolas, "Courier New", monospace',
+      // 使用系统默认等宽字体,不打包字体。
+      fontFamily: 'Consolas, "Cascadia Mono", "Courier New", monospace',
       theme: { background: "#0c0c0c", foreground: "#cccccc" },
       scrollback: 5000,
     });
@@ -47,6 +48,13 @@ export const TerminalView = ({
     let disposed = false;
     const sessionIdRef: { current: number | null } = { current: null };
     const unlistenFns: (() => void)[] = [];
+
+    const doResize = () => {
+      const sid = sessionIdRef.current;
+      if (sid != null && term.cols > 0 && term.rows > 0) {
+        invoke("resize_terminal", { id: sid, cols: term.cols, rows: term.rows }).catch(() => {});
+      }
+    };
 
     // 先挂监听再创建会话,避免错过启动输出
     (async () => {
@@ -82,9 +90,7 @@ export const TerminalView = ({
         }
         sessionIdRef.current = id;
         onSessionIdRef.current(id);
-        if (term.cols > 0 && term.rows > 0) {
-          invoke("resize_terminal", { id, cols: term.cols, rows: term.rows }).catch(() => {});
-        }
+        doResize();
       } catch (e) {
         term.write(`\r\n\x1b[91m[启动终端失败] ${String(e)}\x1b[0m`);
       }
@@ -100,12 +106,7 @@ export const TerminalView = ({
     const ro = new ResizeObserver(() => {
       try {
         fit.fit();
-        const sid = sessionIdRef.current;
-        if (sid != null && term.cols > 0 && term.rows > 0) {
-          invoke("resize_terminal", { id: sid, cols: term.cols, rows: term.rows }).catch(
-            () => {},
-          );
-        }
+        doResize();
       } catch {
         /* 容器隐藏时尺寸为 0 */
       }
