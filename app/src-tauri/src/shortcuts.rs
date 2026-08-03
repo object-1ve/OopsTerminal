@@ -8,17 +8,73 @@ use tauri_plugin_global_shortcut::{
 /// Runtime view of user settings, kept in sync with the database.
 pub struct SettingsState(pub Mutex<db::Settings>);
 
+/// 显示主窗口并聚焦。单实例回调与快捷键的显示分支共用。
+pub fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        #[cfg(target_os = "windows")]
+        {
+            // 参考 template/OopsInterview 的实现:用 Win32 SetWindowPos 显示窗口,
+            // 避免任务栏残留图标,仅在隐藏任务栏图标时强制 WS_EX_TOOLWINDOW。
+            use windows::Win32::UI::WindowsAndMessaging::{
+                GetWindowLongW, SetWindowLongW, SetWindowPos, GWL_EXSTYLE, HWND_NOTOPMOST,
+                HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+                WS_EX_TOOLWINDOW,
+            };
+
+            let hwnd = match window.hwnd() {
+                Ok(h) => h,
+                Err(_) => return,
+            };
+
+            unsafe {
+                // 仅在隐藏任务栏图标时强制 WS_EX_TOOLWINDOW,否则让窗口出现在任务栏
+                let show_taskbar = app
+                    .state::<SettingsState>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .show_taskbar_icon;
+                let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                let updated = if show_taskbar {
+                    ex_style & !(WS_EX_TOOLWINDOW.0 as i32)
+                } else {
+                    ex_style | (WS_EX_TOOLWINDOW.0 as i32)
+                };
+                SetWindowLongW(hwnd, GWL_EXSTYLE, updated);
+                // 尊重用户的置顶设置,而不是无条件置顶
+                let insert_after = if window.is_always_on_top().unwrap_or(false) {
+                    Some(HWND_TOPMOST)
+                } else {
+                    Some(HWND_NOTOPMOST)
+                };
+                let _ = SetWindowPos(
+                    hwnd,
+                    insert_after,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+                let _ = window.set_focus();
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
 pub fn toggle_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         #[cfg(target_os = "windows")]
         {
-            // 参考 template/OopsInterview 的实现:用 Win32 SetWindowPos 隐蔽显隐,
-            // 避免任务栏残留图标,显示时强制 WS_EX_TOOLWINDOW。
             use windows::Win32::Foundation::HWND;
             use windows::Win32::UI::WindowsAndMessaging::{
-                GetWindowLongW, IsIconic, IsWindowVisible, SetWindowLongW, SetWindowPos,
-                GWL_EXSTYLE, HWND_NOTOPMOST, HWND_TOPMOST, SWP_HIDEWINDOW, SWP_NOACTIVATE,
-                SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_TOOLWINDOW,
+                IsIconic, IsWindowVisible, SetWindowPos, SWP_HIDEWINDOW, SWP_NOACTIVATE,
+                SWP_NOMOVE, SWP_NOSIZE,
             };
 
             let hwnd = match window.hwnd() {
@@ -39,36 +95,7 @@ pub fn toggle_main_window(app: &AppHandle) {
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_HIDEWINDOW,
                     );
                 } else {
-                    // 仅在隐藏任务栏图标时强制 WS_EX_TOOLWINDOW,否则让窗口出现在任务栏
-                    let show_taskbar = app
-                        .state::<SettingsState>()
-                        .0
-                        .lock()
-                        .unwrap()
-                        .show_taskbar_icon;
-                    let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-                    let updated = if show_taskbar {
-                        ex_style & !(WS_EX_TOOLWINDOW.0 as i32)
-                    } else {
-                        ex_style | (WS_EX_TOOLWINDOW.0 as i32)
-                    };
-                    SetWindowLongW(hwnd, GWL_EXSTYLE, updated);
-                    // 尊重用户的置顶设置,而不是无条件置顶
-                    let insert_after = if window.is_always_on_top().unwrap_or(false) {
-                        Some(HWND_TOPMOST)
-                    } else {
-                        Some(HWND_NOTOPMOST)
-                    };
-                    let _ = SetWindowPos(
-                        hwnd,
-                        insert_after,
-                        0,
-                        0,
-                        0,
-                        0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-                    );
-                    let _ = window.set_focus();
+                    show_main_window(app);
                 }
             }
         }
@@ -78,8 +105,7 @@ pub fn toggle_main_window(app: &AppHandle) {
             if visible {
                 let _ = window.hide();
             } else {
-                let _ = window.show();
-                let _ = window.set_focus();
+                show_main_window(app);
             }
         }
     }

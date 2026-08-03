@@ -13,6 +13,10 @@ pub struct DbState(Mutex<rusqlite::Connection>);
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 已有一个实例在运行时,新实例直接退出,并唤起已有实例的主窗口
+            shortcuts::show_main_window(app);
+        }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // 初始化数据库路径
