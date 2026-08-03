@@ -11,3 +11,14 @@
 .terminal-container .xterm {
   height: 100%;
 }
+
+/* 隐藏终端右侧滚动条,保留滚动功能 */
+.terminal-container .xterm-viewport {
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE / 旧版 Edge */
+}
+.terminal-container .xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;               /* Chrome / Safari / Edge */
+}
