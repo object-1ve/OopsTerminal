@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
@@ -38,6 +39,11 @@ export const TerminalView = ({
     const fit = new FitAddon();
     fitRef.current = fit;
     term.loadAddon(fit);
+    // Unicode 11 宽度检测:正确识别 emoji (U+1F000+) 为 2 格宽,
+    // 修复默认 UnicodeV6 对 BMP 外字符一律返回 1 导致的行末溢出。
+    const unicode11 = new Unicode11Addon();
+    term.loadAddon(unicode11);
+    term.unicode.activeVersion = "11";
     term.open(containerRef.current!);
 
     let disposed = false;
