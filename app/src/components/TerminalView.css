@@ -2,14 +2,22 @@
   width: 100%;
   height: 100%;
   background: #0c0c0c;
-  padding: 4px 0 4px 6px;
+  padding: 0;
   box-sizing: border-box;
   overflow: hidden;
   text-align: left;
 }
 
+/*
+ * FitAddon 计算 cols/rows 时,会从父元素宽度里减去 .xterm 元素自身的 padding
+ * (见 FitAddon.proposeDimensions)。padding 必须放在 .xterm 上,否则测量到的
+ * 可用宽度与真实渲染(从父元素 padding 内侧开始)不一致,导致 cols 偏大、
+ * 一行放不下被折行错位。之前 padding 写在父容器上正是这个 bug 的根源。
+ */
 .terminal-container .xterm {
   height: 100%;
+  padding: 4px 0 4px 6px;
+  box-sizing: border-box;
 }
 
 /*
