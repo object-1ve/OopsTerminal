@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
@@ -145,6 +146,22 @@ export const TerminalView = ({
     term.loadAddon(unicode11);
     term.unicode.activeVersion = "11";
     term.open(containerRef.current!);
+
+    // WebGL 渲染器:字形按网格坐标绘制,不受 DOM 渲染器 letter-spacing 的
+    // 边界漂移影响(Chromium 对含 CJK 的行会把右边界逐格推偏,导致右边框
+    // 上下不齐,见 xtermjs/xterm.js#6058)。激活失败/上下文丢失时回退默认
+    // DOM 渲染器。
+    let webglAddon: WebglAddon | null = null;
+    try {
+      webglAddon = new WebglAddon();
+      term.loadAddon(webglAddon);
+      webglAddon.onContextLoss(() => {
+        // 上下文无法恢复时卸载,自动恢复默认 DOM 渲染器
+        webglAddon?.dispose();
+      });
+    } catch (e) {
+      console.warn("[TerminalRenderer] WebGL 不可用,回退 DOM 渲染器:", e);
+    }
 
     let disposed = false;
     const sessionIdRef: { current: number | null } = { current: null };

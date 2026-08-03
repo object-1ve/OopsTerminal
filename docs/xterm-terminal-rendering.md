@@ -12,6 +12,7 @@
 5. [字体走过的弯路](#5-字体走过的弯路)
 6. [易错点清单](#6-易错点清单)
 7. [相关提交](#7-相关提交)
+8. [DOM 渲染器 letter-spacing 漂移(xterm 6 默认渲染器)](#8-dom-渲染器-letter-spacing-漂移)
 
 ## 1. 问题现象
 
@@ -21,6 +22,7 @@
 2. 行末字符被截断 / 换行错位,中英文混排时更明显
 3. 含 emoji/图标(如 `🐕` `✓` `▶`)的行右边缘溢出
 4. 对比:原生 Windows Terminal / PowerShell 显示完全正常
+5. **含中文的行,右边缘比纯英文行偏右几个像素,盒子右边框上下不齐**(xterm 6 专属)
 
 ## 2. 根本原因:四个独立问题叠加
 
@@ -68,6 +70,12 @@ public wcwidth(num: number): UnicodeCharWidth {
 
 但浏览器用 Segoe UI Emoji 渲染时占 **2 格宽**。缓冲区按 1 格记账、渲染占 2 格 → 行末溢出、后续列错位。
 
+### 2.5 DOM 渲染器:宽字符 span 的 letter-spacing 边界漂移(现象 5 的根因)
+
+xterm 6 将 **DOM 渲染器设为默认渲染器**(此前默认是 canvas)。DOM 渲染器为了把全角字符撑满 2 格,会给每个宽字符 span 设 `letter-spacing = 2×cellWidth − 字形宽`(Consolas 14px 下约 +2.8px)。但 Chromium/WebView2 会把 span 末尾的 letter-spacing 再算一次,**每个宽字符 span 之后的内容整体向右漂移约一个 letter-spacing 值**;纯英文行不需要补偿,漂移为 0。结果:含中文的行右边界被推偏,与纯英文行的右边框上下不齐。PowerShell/Windows Terminal 走 DirectWrite 按网格绘制,不受影响,所以"同样字体却正常"。
+
+相关上游问题:xtermjs/xterm.js#6058(其中已确认 canvas/webgl 渲染器免疫此问题)。
+
 ## 3. 问题速查表
 
 | 现象 | 根因 | 修复 |
@@ -76,6 +84,7 @@ public wcwidth(num: number): UnicodeCharWidth {
 | 首字符跑到上一行行尾(所有行) | padding 写在父容器 | padding 移到 `.xterm` 元素上 |
 | 首字符跑到上一行行尾(含中文标点) | Chrome text-spacing-trim 压缩标点 | `.xterm { text-spacing-trim: space-all }` |
 | 含 emoji/图标的行右边缘溢出 | wcwidth 把 emoji 当 1 格 | 启用 `@xterm/addon-unicode11` |
+| 含中文的行右边界偏右、右边框上下不齐 | DOM 渲染器宽字符 letter-spacing 边界漂移 | 启用 `@xterm/addon-webgl`(失败自动回退 DOM) |
 
 ## 4. 修复方案详解
 
@@ -192,3 +201,41 @@ Unicode 11 正确将 emoji(U+1F000+)识别为 2 格宽,与浏览器渲染一致�
 - `app/src/components/TerminalView.tsx` — xterm 初始化(allowProposedApi、Unicode11、fit 时序、create_terminal 传尺寸)
 - `app/src/components/TerminalView.css` — `.xterm` padding、text-spacing-trim、滚动条
 - `app/src-tauri/src/terminal.rs` — `create_terminal(cols, rows)` 使用前端尺寸创建 PTY
+
+## 8. DOM 渲染器 letter-spacing 漂移(xterm 6 默认渲染器)
+
+### 8.1 背景
+
+xterm 6 起内置默认渲染器改为 **DOM 渲染器**(逐字符 span + letter-spacing 补偿)。`@xterm/addon-canvas` 停留在 xterm 5(peer `^5.0.0`,2024 年后未更新),不可用于 xterm 6。
+
+### 8.2 修复:启用 WebGL 渲染器并回退 DOM
+
+```bash
+npm install @xterm/addon-webgl   # 0.19.0 起与 xterm 6 配套(无 peer 冲突)
+```
+
+```typescript
+import { WebglAddon } from "@xterm/addon-webgl";
+
+// 必须在 term.open() 之后加载,才能同步捕获 WebGL2 不可用的异常
+let webglAddon: WebglAddon | null = null;
+try {
+  webglAddon = new WebglAddon();
+  term.loadAddon(webglAddon);
+  webglAddon.onContextLoss(() => {
+    webglAddon?.dispose(); // 上下文丢失且无法恢复时,自动切回 DOM 渲染器
+  });
+} catch (e) {
+  console.warn("WebGL 不可用,回退 DOM 渲染器:", e);
+}
+```
+
+WebGL 渲染器按网格坐标把字形画到 canvas,不使用 letter-spacing 补偿,因此对 2.5 的漂移和 2.3 的标点压缩都免疫。字体切换(设置里的自定义字体)通过 `handleCharSizeChanged`/`_refreshCharAtlas` 自动重建字集,原有 `applyTerminalFont` 流程无需改动。
+
+### 8.3 注意事项
+
+- 必须 `term.open()` 之后再 `loadAddon(webglAddon)`:`activate` 在 onWillOpen 阶段会创建 WebGL2 上下文,提前加载时异常会从 `open()` 里抛出,无法被 `loadAddon` 的 try/catch 捕获。
+- 无需 `allowProposedApi`(WebGL addon 是正式 API)。
+- WebView2(Chromium)支持 WebGL2;无 GPU 环境会走 SwiftShader 软件渲染,一般仍可用。
+- `text-spacing-trim: space-all` 保留:DOM 渲染器回退路径仍然需要它。
+- 卸载标签页时 `term.dispose()` 会经 AddonManager 自动 dispose addon,无需手动清理。
