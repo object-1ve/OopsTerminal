@@ -12,6 +12,16 @@
   height: 100%;
 }
 
+/*
+ * 修复 Chrome 默认 CJK 标点压缩 (text-spacing-trim) 导致的 DOM 渲染器
+ * 宽字符宽度测量与真实渲染不一致,产生本行最左侧字符跑到上一行行尾的错位。
+ * text-spacing-trim 是继承属性,一处设置即可覆盖内部的宽度测量容器。
+ * Firefox/Safari 不默认压缩,该属性无效。
+ */
+.terminal-container .xterm {
+  text-spacing-trim: space-all;
+}
+
 /* 缩小终端右侧滚动条宽度,保留滚动功能 */
 .terminal-container .xterm-viewport {
   scrollbar-width: thin;        /* Firefox */
