@@ -52,6 +52,9 @@ pub fn run() {
             app.manage(SettingsState(Mutex::new(settings)));
             app.manage(terminal::TerminalManager::default());
 
+            // 托盘菜单事件全局注册一次,避免重复创建托盘时监听器累积
+            ui::register_global_menu_events(&app_handle);
+
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
