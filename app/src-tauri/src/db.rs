@@ -8,6 +8,8 @@ pub struct Settings {
     pub default_path: Option<String>,
     pub show_tray_icon: bool,
     pub show_taskbar_icon: bool,
+    /// 终端字体 CSS font-family,None 表示使用默认字体
+    pub terminal_font: Option<String>,
 }
 
 pub fn init_db(app_dir: PathBuf) -> Result<Connection> {
@@ -32,6 +34,7 @@ pub fn load_settings(conn: &Connection) -> Result<Settings> {
         default_path: load_setting(conn, "default_path")?,
         show_tray_icon: load_bool(conn, "show_tray_icon", true)?,
         show_taskbar_icon: load_bool(conn, "show_taskbar_icon", false)?,
+        terminal_font: load_setting(conn, "terminal_font")?,
     })
 }
 

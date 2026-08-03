@@ -4,6 +4,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{
     GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState,
 };
+use tauri::Emitter;
 
 /// Runtime view of user settings, kept in sync with the database.
 pub struct SettingsState(pub Mutex<db::Settings>);
@@ -212,6 +213,33 @@ pub fn set_default_path(
         db::save_setting(&conn, "default_path", path.as_deref())
             .map_err(|e| format!("保存设置失败: {e}"))?;
         guard.default_path = path;
+    }
+
+    Ok(guard.clone())
+}
+
+/// 保存终端字体 (CSS font-family)。传 None 或空字符串恢复默认字体。
+/// 保存后广播 settings-changed 事件,已打开的终端实时应用新字体。
+#[tauri::command]
+pub fn set_terminal_font(
+    app: AppHandle,
+    state: tauri::State<'_, SettingsState>,
+    font: Option<String>,
+) -> Result<db::Settings, String> {
+    let font = font
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let mut guard = state.0.lock().unwrap();
+    if guard.terminal_font != font {
+        let db_state = app.state::<crate::DbState>();
+        let conn = db_state.0.lock().unwrap();
+        db::save_setting(&conn, "terminal_font", font.as_deref())
+            .map_err(|e| format!("保存设置失败: {e}"))?;
+        guard.terminal_font = font;
+
+        // 通知所有已打开的终端应用新字体
+        let _ = app.emit("settings-changed", ());
     }
 
     Ok(guard.clone())

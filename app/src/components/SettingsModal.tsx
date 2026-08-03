@@ -8,6 +8,7 @@ type Settings = {
   default_path: string | null;
   show_tray_icon: boolean;
   show_taskbar_icon: boolean;
+  terminal_font: string | null;
 };
 
 type ShortcutKey = "toggle_window_shortcut" | "quit_shortcut";
@@ -50,21 +51,23 @@ export const SettingsModal = ({
   const [defaultPath, setDefaultPath] = useState("");
   const [showTrayIcon, setShowTrayIcon] = useState(true);
   const [showTaskbarIcon, setShowTaskbarIcon] = useState(false);
+  const [terminalFont, setTerminalFont] = useState("");
   const [recording, setRecording] = useState<ShortcutKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setRecording(null);
-    setError(null);
     invoke<Settings>("get_settings")
       .then((s) => {
+        setRecording(null);
+        setError(null);
         setToggleShortcut(s.toggle_window_shortcut);
         setQuitShortcut(s.quit_shortcut);
         setDefaultPath(s.default_path ?? "");
         setShowTrayIcon(s.show_tray_icon);
         setShowTaskbarIcon(s.show_taskbar_icon);
+        setTerminalFont(s.terminal_font ?? "");
       })
       .catch(() => setError("无法读取设置"));
   }, [open]);
@@ -98,6 +101,9 @@ export const SettingsModal = ({
       await invoke("set_ui_settings", {
         showTrayIcon,
         showTaskbarIcon,
+      });
+      await invoke("set_terminal_font", {
+        font: terminalFont.trim() || null,
       });
       onClose();
     } catch (e) {
@@ -175,6 +181,24 @@ export const SettingsModal = ({
         </div>
 
         <div className="settings-row">
+          <div className="settings-label">终端字体</div>
+          <input
+            type="text"
+            className="settings-path-input"
+            placeholder='Consolas, "Cascadia Mono", "Courier New", monospace'
+            value={terminalFont}
+            onChange={(e) => setTerminalFont(e.target.value)}
+          />
+          <button
+            type="button"
+            className="shortcut-clear"
+            onClick={() => setTerminalFont("")}
+          >
+            清除
+          </button>
+        </div>
+
+        <div className="settings-row">
           <div className="settings-label">显示托盘图标</div>
           <label className="settings-switch">
             <input
@@ -203,7 +227,7 @@ export const SettingsModal = ({
         </div>
 
         <p className="settings-hint">
-          点击输入框后按下组合键（如 Ctrl+Shift+K）。显示/隐藏快捷键可切换窗口显隐，留空表示禁用。默认启动路径留空表示使用用户主目录。
+          点击输入框后按下组合键（如 Ctrl+Shift+K）。显示/隐藏快捷键可切换窗口显隐，留空表示禁用。默认启动路径留空表示使用用户主目录。终端字体填写 CSS font-family，留空使用默认字体。
         </p>
 
         {error && <p className="settings-error">{error}</p>}

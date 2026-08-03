@@ -9,6 +9,20 @@ import "./TerminalView.css";
 
 type TerminalOutput = { id: number; data: string };
 type TerminalExit = { id: number };
+type Settings = { terminal_font: string | null };
+
+/** 默认终端字体。 */
+const DEFAULT_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
+
+/** 读取设置中的终端字体,未设置时返回默认字体。 */
+async function loadTerminalFont(): Promise<string> {
+  try {
+    const s = await invoke<Settings>("get_settings");
+    return s.terminal_font?.trim() || DEFAULT_FONT;
+  } catch {
+    return DEFAULT_FONT;
+  }
+}
 
 export const TerminalView = ({
   active,
@@ -31,8 +45,8 @@ export const TerminalView = ({
       allowProposedApi: true,
       cursorBlink: true,
       fontSize: 14,
-      // 使用系统默认等宽字体,不打包字体。
-      fontFamily: 'Consolas, "Cascadia Mono", "Courier New", monospace',
+      // 字体从设置读取,设置变更时通过 settings-changed 事件实时更新
+      fontFamily: DEFAULT_FONT,
       theme: { background: "#0c0c0c", foreground: "#cccccc" },
       scrollback: 5000,
     });
@@ -57,6 +71,20 @@ export const TerminalView = ({
         invoke("resize_terminal", { id: sid, cols: term.cols, rows: term.rows }).catch(() => {});
       }
     };
+
+    // 应用设置中的字体(异步读取,先于/晚于终端创建都安全)
+    loadTerminalFont().then((font) => {
+      if (!disposed && term.options.fontFamily !== font) {
+        term.options.fontFamily = font;
+        // 字体变化可能改变字符宽度,重新 fit 并把新尺寸同步给后端
+        try {
+          fit.fit();
+          doResize();
+        } catch {
+          /* 容器隐藏时忽略 */
+        }
+      }
+    });
 
     // 先挂监听再创建会话,避免错过启动输出
     (async () => {
@@ -123,6 +151,28 @@ export const TerminalView = ({
     });
     if (containerRef.current) ro.observe(containerRef.current);
 
+    // 设置保存后实时应用新字体
+    let unSettingsChanged: (() => void) | undefined;
+    listen("settings-changed", () => {}).then((un) => {
+      if (disposed) {
+        un();
+        return;
+      }
+      unSettingsChanged = un;
+      loadTerminalFont().then((font) => {
+        if (disposed) return;
+        if (term.options.fontFamily !== font) {
+          term.options.fontFamily = font;
+          try {
+            fit.fit();
+            doResize();
+          } catch {
+            /* 容器隐藏时忽略 */
+          }
+        }
+      });
+    });
+
     return () => {
       disposed = true;
       const sid = sessionIdRef.current;
@@ -132,9 +182,9 @@ export const TerminalView = ({
       dataSub.dispose();
       ro.disconnect();
       unlistenFns.forEach((f) => f());
+      unSettingsChanged?.();
       term.dispose();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 切换为激活标签页时重新适配尺寸

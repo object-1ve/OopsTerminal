@@ -42,6 +42,7 @@ pub fn run() {
                 default_path: None,
                 show_tray_icon: true,
                 show_taskbar_icon: false,
+                terminal_font: None,
             });
 
             app.manage(DbState(Mutex::new(conn)));
@@ -81,6 +82,7 @@ pub fn run() {
             shortcuts::get_settings,
             shortcuts::set_shortcut,
             shortcuts::set_default_path,
+            shortcuts::set_terminal_font,
             ui::set_ui_settings,
             terminal::create_terminal,
             terminal::write_terminal,
