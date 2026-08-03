@@ -162,7 +162,7 @@ jobs:
         run: ls -lhR dist
         working-directory: ${{ github.workspace }}
 
-      # 发布正文由 release-body.mjs 从 git 提交历史自动生成(上一个标签..当前标签),
+      # 发布正文由 release-body.mjs 从 git 提交历史自动生成(上一个标签..最新提交 HEAD),
       # 无需手动维护 CHANGELOG。脚本把正文写入临时文件,再用 body_path 指定。
       - name: Generate release body from git history
         run: node ${{ github.workspace }}/.github/scripts/release-body.mjs ${{ github.ref_name }} ${{ github.workspace }}/release_body.md
