@@ -78,7 +78,7 @@ jobs:
         run: pnpm tbuild --bundles msi
 
       - name: Upload MSI installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: OopsTerminal-Windows
           path: app/src-tauri/target/release/bundle/msi/*.msi
@@ -128,7 +128,7 @@ jobs:
         run: pnpm tbuild --bundles dmg
 
       - name: Upload DMG installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: OopsTerminal-macOS
           path: app/src-tauri/target/release/bundle/dmg/*.dmg
