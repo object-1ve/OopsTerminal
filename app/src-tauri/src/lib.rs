@@ -19,6 +19,57 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        // 终端字体自定义协议:font://localhost/<base64路径>
+        // 直接流式返回字体文件字节,避免大文件 base64 走 IPC 卡死 WebView2
+        .register_uri_scheme_protocol("font", |_ctx, request| {
+            use base64::Engine;
+
+            // 兼容 font://localhost/<b64> 与 http://font.localhost/<b64> 两种形式
+            let path_b64 = request
+                .uri()
+                .to_string()
+                .split('/')
+                .nth(2)
+                .unwrap_or("")
+                .to_string();
+            let path = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(path_b64)
+                .ok()
+                .and_then(|b| String::from_utf8(b).ok());
+
+            let Some(path) = path else {
+                return tauri::http::Response::builder()
+                    .status(400)
+                    .body(Vec::new())
+                    .unwrap();
+            };
+
+            let pb = std::path::PathBuf::from(&path);
+            let ext = pb
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let mime = match ext.as_str() {
+                "ttf" => "font/ttf",
+                "otf" => "font/otf",
+                "woff" => "font/woff",
+                "woff2" => "font/woff2",
+                _ => "application/octet-stream",
+            };
+
+            match std::fs::read(&pb) {
+                Ok(bytes) => tauri::http::Response::builder()
+                    .header("Content-Type", mime)
+                    .header("Cache-Control", "no-cache")
+                    .body(bytes)
+                    .unwrap(),
+                Err(_) => tauri::http::Response::builder()
+                    .status(404)
+                    .body(Vec::new())
+                    .unwrap(),
+            }
+        })
         .setup(|app| {
             // 初始化数据库路径
             let app_data_dir = app
@@ -84,7 +135,6 @@ pub fn run() {
             shortcuts::set_shortcut,
             shortcuts::set_default_path,
             shortcuts::set_terminal_font_path,
-            shortcuts::read_font_file,
             ui::set_ui_settings,
             terminal::create_terminal,
             terminal::write_terminal,

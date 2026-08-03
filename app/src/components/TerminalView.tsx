@@ -10,7 +10,6 @@ import "./TerminalView.css";
 type TerminalOutput = { id: number; data: string };
 type TerminalExit = { id: number };
 type Settings = { terminal_font_path: string | null };
-type FontFile = { mime: string; data: string };
 
 /** 默认终端字体。 */
 const DEFAULT_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
@@ -18,28 +17,51 @@ const DEFAULT_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
 /** 注册到页面里的自定义字体家族名。 */
 const CUSTOM_FONT_FAMILY = "OopsTerminalCustomFont";
 
+/** 字体加载超时(毫秒),超时回退默认字体,避免终端卡在加载。 */
+const FONT_LOAD_TIMEOUT = 8000;
+
+/** 把路径编码为 font:// 协议 URL(base64 编码 UTF-8 字节,避免特殊字符)。 */
+function fontUrl(path: string): string {
+  const bytes = new TextEncoder().encode(path);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  // URL-safe base64:替换 + / 并去掉 =,避免 URL 转义问题
+  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `font://localhost/${b64}`;
+}
+
+/** 给 Promise 加超时,超时返回 fallback。 */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
 /**
  * 读取设置中的终端字体文件路径并加载为自定义字体。
  * 未设置路径时返回默认字体;文件读取/解析失败时回退默认字体。
  */
 async function resolveTerminalFont(): Promise<string> {
-  try {
-    const s = await invoke<Settings>("get_settings");
-    const path = s.terminal_font_path?.trim();
-    if (!path) return DEFAULT_FONT;
+  const s = await invoke<Settings>("get_settings");
+  const path = s.terminal_font_path?.trim();
+  if (!path) return DEFAULT_FONT;
 
-    const font = await invoke<FontFile>("read_font_file", { path });
-    if (!font.data) return DEFAULT_FONT;
-
-    // 注册字体到文档,后续 term.options.fontFamily 引用该家族名即可
-    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(data:${font.mime};base64,${font.data})`);
-    const loaded = await face.load();
-    document.fonts.add(loaded);
-    await document.fonts.ready;
-    return `"${CUSTOM_FONT_FAMILY}", ${DEFAULT_FONT}`;
-  } catch {
-    return DEFAULT_FONT;
-  }
+  // 通过自定义协议加载,不经 IPC 传大文件;加载超时/失败回退默认字体
+  const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${fontUrl(path)})`);
+  const loaded = await withTimeout(face.load(), FONT_LOAD_TIMEOUT, null);
+  if (!loaded) return DEFAULT_FONT;
+  document.fonts.add(loaded);
+  return `"${CUSTOM_FONT_FAMILY}", ${DEFAULT_FONT}`;
 }
 
 /** 应用字体到终端,并在字体变化后重新 fit、同步 PTY 尺寸。 */
@@ -109,7 +131,7 @@ export const TerminalView = ({
     };
 
     // 应用设置中的字体(异步读取,先于/晚于终端创建都安全)
-    resolveTerminalFont().then((font) => {
+    withTimeout(resolveTerminalFont(), FONT_LOAD_TIMEOUT, DEFAULT_FONT).then((font) => {
       if (!disposed) applyTerminalFont(term, fit, font, doResize);
     });
 
@@ -186,7 +208,7 @@ export const TerminalView = ({
         return;
       }
       unSettingsChanged = un;
-      resolveTerminalFont().then((font) => {
+      withTimeout(resolveTerminalFont(), FONT_LOAD_TIMEOUT, DEFAULT_FONT).then((font) => {
         if (!disposed) applyTerminalFont(term, fit, font, doResize);
       });
     });

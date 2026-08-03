@@ -245,43 +245,6 @@ pub fn set_terminal_font_path(
     Ok(guard.clone())
 }
 
-/// 读取本地字体文件,返回 base64 编码,供前端注册为自定义字体。
-/// 支持 ttf / otf / woff / woff2。
-#[tauri::command]
-pub fn read_font_file(path: String) -> Result<serde_json::Value, String> {
-    use std::io::Read;
-
-    let pb = std::path::PathBuf::from(path);
-    let ext = pb
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-
-    let mime = match ext.as_str() {
-        "ttf" => "font/ttf",
-        "otf" => "font/otf",
-        "woff" => "font/woff",
-        "woff2" => "font/woff2",
-        _ => return Err("不支持的字体格式,仅支持 ttf/otf/woff/woff2".into()),
-    };
-
-    let mut file = std::fs::File::open(&pb)
-        .map_err(|e| format!("无法打开字体文件: {e}"))?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
-        .map_err(|e| format!("读取字体文件失败: {e}"))?;
-
-    use base64::Engine;
-    let base64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-
-    Ok(serde_json::json!({
-        "mime": mime,
-        "data": base64,
-        "size": bytes.len(),
-    }))
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
