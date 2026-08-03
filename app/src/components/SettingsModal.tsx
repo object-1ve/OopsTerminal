@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import "./SettingsModal.css";
 
@@ -17,15 +17,6 @@ type ShortcutKey = "toggle_window_shortcut" | "quit_shortcut";
 const MODIFIER_ONLY = new Set(["Control", "Alt", "Shift", "Meta"]);
 const CUSTOM_FONT_FAMILY = "OopsTerminalCustomFont";
 const FONT_LOAD_TIMEOUT = 8000;
-
-/** 把路径编码为 font:// 协议 URL(与 TerminalView 一致)。 */
-function fontUrl(path: string): string {
-  const bytes = new TextEncoder().encode(path);
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  return `font://localhost/${b64}`;
-}
 
 /** 给 Promise 加超时。 */
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
@@ -47,7 +38,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 /** 尝试加载字体文件,返回错误信息(空字符串表示成功)。 */
 async function verifyFontFile(path: string): Promise<string> {
   try {
-    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${fontUrl(path)})`);
+    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${convertFileSrc(path)})`);
     const loaded = await withTimeout(face.load(), FONT_LOAD_TIMEOUT, null);
     if (!loaded) return "字体加载超时,文件可能不存在或格式不受支持";
     document.fonts.add(loaded);

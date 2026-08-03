@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalView.css";
@@ -19,16 +19,6 @@ const CUSTOM_FONT_FAMILY = "OopsTerminalCustomFont";
 
 /** 字体加载超时(毫秒),超时回退默认字体,避免终端卡在加载。 */
 const FONT_LOAD_TIMEOUT = 8000;
-
-/** 把路径编码为 font:// 协议 URL(base64 编码 UTF-8 字节,避免特殊字符)。 */
-function fontUrl(path: string): string {
-  const bytes = new TextEncoder().encode(path);
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  // URL-safe base64:替换 + / 并去掉 =,避免 URL 转义问题
-  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  return `font://localhost/${b64}`;
-}
 
 /** 给 Promise 加超时,超时返回 fallback。 */
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
@@ -77,8 +67,8 @@ async function resolveTerminalFont(): Promise<FontResolve> {
     }
 
     console.log("[TerminalFont] 开始加载字体文件:", path);
-    // 通过自定义协议加载,不经 IPC 传大文件;加载超时/失败回退默认字体
-    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${fontUrl(path)})`);
+    // 通过 Tauri 内置 asset 协议加载本地字体文件(自带 CORS 处理)
+    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${convertFileSrc(path)})`);
     const loaded = await withTimeout(face.load(), FONT_LOAD_TIMEOUT, null);
     if (!loaded) {
       console.warn("[TerminalFont] 字体加载超时或失败,回退默认字体:", path);
