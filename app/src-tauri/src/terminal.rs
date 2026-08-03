@@ -84,12 +84,14 @@ pub fn create_terminal(
     app: AppHandle,
     state: State<'_, TerminalManager>,
     settings: State<'_, crate::shortcuts::SettingsState>,
+    cols: u16,
+    rows: u16,
 ) -> Result<u32, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
-            rows: 30,
-            cols: 100,
+            rows,
+            cols,
             pixel_width: 0,
             pixel_height: 0,
         })

@@ -83,14 +83,18 @@ export const TerminalView = ({
       }
 
       try {
-        const id = await invoke<number>("create_terminal");
+        // 前端先算好 xterm 的实际列数/行数再创建 PTY,
+        // 避免硬编码 100×30 与实际尺寸不一致导致初始输出换行错位。
+        const id = await invoke<number>("create_terminal", {
+          cols: term.cols,
+          rows: term.rows,
+        });
         if (disposed) {
           invoke("kill_terminal", { id }).catch(() => {});
           return;
         }
         sessionIdRef.current = id;
         onSessionIdRef.current(id);
-        doResize();
       } catch (e) {
         term.write(`\r\n\x1b[91m[启动终端失败] ${String(e)}\x1b[0m`);
       }
