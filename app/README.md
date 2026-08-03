@@ -85,3 +85,7 @@ npm run dev
 | `npm run tbuild` | 构建 Tauri 生产安装包 |
 | `npm run lint` | ESLint 代码检查 |
 | `npm run preview` | 预览构建产物 |
+
+## 技术参考
+
+- [Tauri 2 托盘图标与任务栏图标控制技术方案](../docs/tauri-tray-taskbar.md) — 托盘移除、任务栏切换、监听器累积等踩坑与正确做法
