@@ -28,6 +28,7 @@ export const TerminalView = ({
 
   useEffect(() => {
     const term = new Terminal({
+      allowProposedApi: true,
       cursorBlink: true,
       fontSize: 14,
       // 使用系统默认等宽字体,不打包字体。
