@@ -139,8 +139,12 @@ jobs:
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      # 需要完整历史以从 git log 生成 release 正文。
+      - name: Checkout repository (full history)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Download Windows installer
         uses: actions/download-artifact@v4
@@ -158,10 +162,9 @@ jobs:
         run: ls -lhR dist
         working-directory: ${{ github.workspace }}
 
-      # 发布正文取自仓库根目录 CHANGELOG.md:先运行脚本把当前版本对应的章节
-      # 提取到临时文件,再用 body_path 指定。每次发版只需在 CHANGELOG.md 顶部
-      # 「## [Unreleased]」下新增当前版本的记录。
-      - name: Generate release body from CHANGELOG.md
+      # 发布正文由 release-body.mjs 从 git 提交历史自动生成(上一个标签..当前标签),
+      # 无需手动维护 CHANGELOG。脚本把正文写入临时文件,再用 body_path 指定。
+      - name: Generate release body from git history
         run: node ${{ github.workspace }}/.github/scripts/release-body.mjs ${{ github.ref_name }} ${{ github.workspace }}/release_body.md
         working-directory: ${{ github.workspace }}
 
