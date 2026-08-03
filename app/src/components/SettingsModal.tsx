@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import "./SettingsModal.css";
 
 type Settings = {
@@ -8,7 +9,7 @@ type Settings = {
   default_path: string | null;
   show_tray_icon: boolean;
   show_taskbar_icon: boolean;
-  terminal_font: string | null;
+  terminal_font_path: string | null;
 };
 
 type ShortcutKey = "toggle_window_shortcut" | "quit_shortcut";
@@ -51,7 +52,7 @@ export const SettingsModal = ({
   const [defaultPath, setDefaultPath] = useState("");
   const [showTrayIcon, setShowTrayIcon] = useState(true);
   const [showTaskbarIcon, setShowTaskbarIcon] = useState(false);
-  const [terminalFont, setTerminalFont] = useState("");
+  const [terminalFontPath, setTerminalFontPath] = useState("");
   const [recording, setRecording] = useState<ShortcutKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -67,7 +68,7 @@ export const SettingsModal = ({
         setDefaultPath(s.default_path ?? "");
         setShowTrayIcon(s.show_tray_icon);
         setShowTaskbarIcon(s.show_taskbar_icon);
-        setTerminalFont(s.terminal_font ?? "");
+        setTerminalFontPath(s.terminal_font_path ?? "");
       })
       .catch(() => setError("无法读取设置"));
   }, [open]);
@@ -102,8 +103,8 @@ export const SettingsModal = ({
         showTrayIcon,
         showTaskbarIcon,
       });
-      await invoke("set_terminal_font", {
-        font: terminalFont.trim() || null,
+      await invoke("set_terminal_font_path", {
+        path: terminalFontPath.trim() || null,
       });
       onClose();
     } catch (e) {
@@ -181,18 +182,35 @@ export const SettingsModal = ({
         </div>
 
         <div className="settings-row">
-          <div className="settings-label">终端字体</div>
+          <div className="settings-label">终端字体文件</div>
           <input
             type="text"
             className="settings-path-input"
-            placeholder='Consolas, "Cascadia Mono", "Courier New", monospace'
-            value={terminalFont}
-            onChange={(e) => setTerminalFont(e.target.value)}
+            placeholder="例如 C:\Fonts\SarasaMonoSC-Regular.ttf"
+            value={terminalFontPath}
+            onChange={(e) => setTerminalFontPath(e.target.value)}
           />
           <button
             type="button"
             className="shortcut-clear"
-            onClick={() => setTerminalFont("")}
+            onClick={async () => {
+              const selected = await openDialog({
+                multiple: false,
+                filters: [
+                  { name: "字体文件", extensions: ["ttf", "otf", "woff", "woff2"] },
+                ],
+              });
+              if (typeof selected === "string") {
+                setTerminalFontPath(selected);
+              }
+            }}
+          >
+            浏览…
+          </button>
+          <button
+            type="button"
+            className="shortcut-clear"
+            onClick={() => setTerminalFontPath("")}
           >
             清除
           </button>
@@ -227,7 +245,7 @@ export const SettingsModal = ({
         </div>
 
         <p className="settings-hint">
-          点击输入框后按下组合键（如 Ctrl+Shift+K）。显示/隐藏快捷键可切换窗口显隐，留空表示禁用。默认启动路径留空表示使用用户主目录。终端字体填写 CSS font-family，留空使用默认字体。
+          点击输入框后按下组合键（如 Ctrl+Shift+K）。显示/隐藏快捷键可切换窗口显隐，留空表示禁用。默认启动路径留空表示使用用户主目录。终端字体文件支持 ttf/otf/woff/woff2，留空使用默认字体。
         </p>
 
         {error && <p className="settings-error">{error}</p>}

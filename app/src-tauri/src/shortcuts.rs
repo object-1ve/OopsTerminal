@@ -218,31 +218,68 @@ pub fn set_default_path(
     Ok(guard.clone())
 }
 
-/// 保存终端字体 (CSS font-family)。传 None 或空字符串恢复默认字体。
+/// 保存终端字体文件路径。传 None 或空字符串恢复默认字体。
 /// 保存后广播 settings-changed 事件,已打开的终端实时应用新字体。
 #[tauri::command]
-pub fn set_terminal_font(
+pub fn set_terminal_font_path(
     app: AppHandle,
     state: tauri::State<'_, SettingsState>,
-    font: Option<String>,
+    path: Option<String>,
 ) -> Result<db::Settings, String> {
-    let font = font
+    let path = path
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
     let mut guard = state.0.lock().unwrap();
-    if guard.terminal_font != font {
+    if guard.terminal_font_path != path {
         let db_state = app.state::<crate::DbState>();
         let conn = db_state.0.lock().unwrap();
-        db::save_setting(&conn, "terminal_font", font.as_deref())
+        db::save_setting(&conn, "terminal_font_path", path.as_deref())
             .map_err(|e| format!("保存设置失败: {e}"))?;
-        guard.terminal_font = font;
+        guard.terminal_font_path = path;
 
         // 通知所有已打开的终端应用新字体
         let _ = app.emit("settings-changed", ());
     }
 
     Ok(guard.clone())
+}
+
+/// 读取本地字体文件,返回 base64 编码,供前端注册为自定义字体。
+/// 支持 ttf / otf / woff / woff2。
+#[tauri::command]
+pub fn read_font_file(path: String) -> Result<serde_json::Value, String> {
+    use std::io::Read;
+
+    let pb = std::path::PathBuf::from(path);
+    let ext = pb
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    let mime = match ext.as_str() {
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        _ => return Err("不支持的字体格式,仅支持 ttf/otf/woff/woff2".into()),
+    };
+
+    let mut file = std::fs::File::open(&pb)
+        .map_err(|e| format!("无法打开字体文件: {e}"))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|e| format!("读取字体文件失败: {e}"))?;
+
+    use base64::Engine;
+    let base64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+
+    Ok(serde_json::json!({
+        "mime": mime,
+        "data": base64,
+        "size": bytes.len(),
+    }))
 }
 
 #[cfg(test)]

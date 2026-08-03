@@ -18,6 +18,7 @@ pub fn run() {
             shortcuts::show_main_window(app);
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // 初始化数据库路径
             let app_data_dir = app
@@ -42,7 +43,7 @@ pub fn run() {
                 default_path: None,
                 show_tray_icon: true,
                 show_taskbar_icon: false,
-                terminal_font: None,
+                terminal_font_path: None,
             });
 
             app.manage(DbState(Mutex::new(conn)));
@@ -82,7 +83,8 @@ pub fn run() {
             shortcuts::get_settings,
             shortcuts::set_shortcut,
             shortcuts::set_default_path,
-            shortcuts::set_terminal_font,
+            shortcuts::set_terminal_font_path,
+            shortcuts::read_font_file,
             ui::set_ui_settings,
             terminal::create_terminal,
             terminal::write_terminal,

@@ -9,18 +9,54 @@ import "./TerminalView.css";
 
 type TerminalOutput = { id: number; data: string };
 type TerminalExit = { id: number };
-type Settings = { terminal_font: string | null };
+type Settings = { terminal_font_path: string | null };
+type FontFile = { mime: string; data: string };
 
 /** 默认终端字体。 */
 const DEFAULT_FONT = 'Consolas, "Cascadia Mono", "Courier New", monospace';
 
-/** 读取设置中的终端字体,未设置时返回默认字体。 */
-async function loadTerminalFont(): Promise<string> {
+/** 注册到页面里的自定义字体家族名。 */
+const CUSTOM_FONT_FAMILY = "OopsTerminalCustomFont";
+
+/**
+ * 读取设置中的终端字体文件路径并加载为自定义字体。
+ * 未设置路径时返回默认字体;文件读取/解析失败时回退默认字体。
+ */
+async function resolveTerminalFont(): Promise<string> {
   try {
     const s = await invoke<Settings>("get_settings");
-    return s.terminal_font?.trim() || DEFAULT_FONT;
+    const path = s.terminal_font_path?.trim();
+    if (!path) return DEFAULT_FONT;
+
+    const font = await invoke<FontFile>("read_font_file", { path });
+    if (!font.data) return DEFAULT_FONT;
+
+    // 注册字体到文档,后续 term.options.fontFamily 引用该家族名即可
+    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(data:${font.mime};base64,${font.data})`);
+    const loaded = await face.load();
+    document.fonts.add(loaded);
+    await document.fonts.ready;
+    return `"${CUSTOM_FONT_FAMILY}", ${DEFAULT_FONT}`;
   } catch {
     return DEFAULT_FONT;
+  }
+}
+
+/** 应用字体到终端,并在字体变化后重新 fit、同步 PTY 尺寸。 */
+function applyTerminalFont(
+  term: Terminal,
+  fit: FitAddon,
+  font: string,
+  doResize: () => void,
+): void {
+  if (term.options.fontFamily !== font) {
+    term.options.fontFamily = font;
+    try {
+      fit.fit();
+      doResize();
+    } catch {
+      /* 容器隐藏时忽略 */
+    }
   }
 }
 
@@ -73,17 +109,8 @@ export const TerminalView = ({
     };
 
     // 应用设置中的字体(异步读取,先于/晚于终端创建都安全)
-    loadTerminalFont().then((font) => {
-      if (!disposed && term.options.fontFamily !== font) {
-        term.options.fontFamily = font;
-        // 字体变化可能改变字符宽度,重新 fit 并把新尺寸同步给后端
-        try {
-          fit.fit();
-          doResize();
-        } catch {
-          /* 容器隐藏时忽略 */
-        }
-      }
+    resolveTerminalFont().then((font) => {
+      if (!disposed) applyTerminalFont(term, fit, font, doResize);
     });
 
     // 先挂监听再创建会话,避免错过启动输出
@@ -159,17 +186,8 @@ export const TerminalView = ({
         return;
       }
       unSettingsChanged = un;
-      loadTerminalFont().then((font) => {
-        if (disposed) return;
-        if (term.options.fontFamily !== font) {
-          term.options.fontFamily = font;
-          try {
-            fit.fit();
-            doResize();
-          } catch {
-            /* 容器隐藏时忽略 */
-          }
-        }
+      resolveTerminalFont().then((font) => {
+        if (!disposed) applyTerminalFont(term, fit, font, doResize);
       });
     });
 
