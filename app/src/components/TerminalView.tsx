@@ -27,7 +27,9 @@ export const TerminalView = ({
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: 'Consolas, "Cascadia Mono", "Courier New", monospace',
+      // 网格由排第一的字体测量,故必须用自洽的等宽字体 (中文=2×西文)。
+      // 若让 Cascadia 排第一,网格按它 8.2px 西文算,中文永远对不齐(见调查)。
+      fontFamily: '"Sarasa Mono SC", "Cascadia Mono", Consolas, "Courier New", monospace',
       theme: { background: "#0c0c0c", foreground: "#cccccc" },
       scrollback: 5000,
     });
