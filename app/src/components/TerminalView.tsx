@@ -39,11 +39,6 @@ export const TerminalView = ({
     fitRef.current = fit;
     term.loadAddon(fit);
     term.open(containerRef.current!);
-    try {
-      fit.fit();
-    } catch {
-      /* 容器尚未有尺寸,等激活时再 fit */
-    }
 
     let disposed = false;
     const sessionIdRef: { current: number | null } = { current: null };
@@ -83,12 +78,16 @@ export const TerminalView = ({
       }
 
       try {
-        // 前端先算好 xterm 的实际列数/行数再创建 PTY,
-        // 避免硬编码 100×30 与实际尺寸不一致导致初始输出换行错位。
-        const id = await invoke<number>("create_terminal", {
-          cols: term.cols,
-          rows: term.rows,
-        });
+        // fit 紧贴 create_terminal,缩小窗口期:
+        // 期间 ResizeObserver / 字体加载等事件循环任务不会导致尺寸过期。
+        try {
+          fit.fit();
+        } catch {
+          /* 容器尚未有尺寸,等激活时再 fit */
+        }
+        const cols = term.cols || 80;
+        const rows = term.rows || 24;
+        const id = await invoke<number>("create_terminal", { cols, rows });
         if (disposed) {
           invoke("kill_terminal", { id }).catch(() => {});
           return;
