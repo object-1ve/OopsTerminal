@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "OopsTerminal",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "identifier": "com.oops.terminal",
   "build": {
     "frontendDist": "../dist",
@@ -25,7 +25,9 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },
