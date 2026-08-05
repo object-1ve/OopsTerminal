@@ -13,10 +13,14 @@
  * (见 FitAddon.proposeDimensions)。padding 必须放在 .xterm 上,否则测量到的
  * 可用宽度与真实渲染(从父元素 padding 内侧开始)不一致,导致 cols 偏大、
  * 一行放不下被折行错位。之前 padding 写在父容器上正是这个 bug 的根源。
+ *
+ * 右侧也留 6px:中文字符按双宽度渲染,行末内容(如表格最右列 $null))
+ * 若紧贴滚动条/窗口边缘会显得"被夹住"。右侧留白后 FitAddon 会自动
+ * 减去该 padding 重算 cols,内容不会被截断。
  */
 .terminal-container .xterm {
   height: 100%;
-  padding: 4px 0 4px 6px;
+  padding: 4px 6px;
   box-sizing: border-box;
 }
 
