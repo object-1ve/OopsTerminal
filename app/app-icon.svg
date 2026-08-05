@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#2d1b69"/>
-      <stop offset="100%" stop-color="#1a1040"/>
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#fde68a"/>
     </linearGradient>
     <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#a855f7"/>
-      <stop offset="100%" stop-color="#7c3aed"/>
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
     </linearGradient>
   </defs>
 
@@ -14,13 +14,13 @@
   <rect x="40" y="40" width="944" height="944" rx="160" ry="160" fill="url(#bg)"/>
 
   <!-- Title bar hint -->
-  <rect x="40" y="40" width="944" height="180" rx="160" ry="160" fill="#1a0e42" opacity="0.6"/>
-  <rect x="40" y="140" width="944" height="80" fill="#1a0e42" opacity="0.6"/>
+  <rect x="40" y="40" width="944" height="180" rx="160" ry="160" fill="#f59e0b" opacity="0.3"/>
+  <rect x="40" y="140" width="944" height="80" fill="#f59e0b" opacity="0.3"/>
 
   <!-- Title bar dots -->
-  <circle cx="160" cy="130" r="28" fill="#f87171"/>
-  <circle cx="248" cy="130" r="28" fill="#fbbf24"/>
-  <circle cx="336" cy="130" r="28" fill="#34d399"/>
+  <circle cx="160" cy="130" r="28" fill="#ef4444"/>
+  <circle cx="248" cy="130" r="28" fill="#eab308"/>
+  <circle cx="336" cy="130" r="28" fill="#22c55e"/>
 
   <!-- Terminal prompt: > -->
   <path d="M260 420 L420 560 L260 700" stroke="url(#accent)" stroke-width="80" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
@@ -29,7 +29,7 @@
   <rect x="480" y="620" width="260" height="80" rx="16" ry="16" fill="url(#accent)"/>
 
   <!-- Blinking dots suggestion - subtle decorative elements -->
-  <circle cx="620" cy="440" r="20" fill="#a855f7" opacity="0.3"/>
-  <circle cx="700" cy="440" r="20" fill="#a855f7" opacity="0.2"/>
-  <circle cx="780" cy="440" r="20" fill="#a855f7" opacity="0.1"/>
+  <circle cx="620" cy="440" r="20" fill="#f59e0b" opacity="0.3"/>
+  <circle cx="700" cy="440" r="20" fill="#f59e0b" opacity="0.2"/>
+  <circle cx="780" cy="440" r="20" fill="#f59e0b" opacity="0.1"/>
 </svg>
