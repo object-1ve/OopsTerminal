@@ -135,6 +135,8 @@ export const TerminalView = ({
       fontFamily: DEFAULT_FONT,
       theme: { background: "#0c0c0c", foreground: "#cccccc" },
       scrollback: 5000,
+      // 右键先选中光标处的单词(已有选区则保留),配合下方 contextmenu 处理实现"右键即复制"
+      rightClickSelectsWord: true,
     });
     termRef.current = term;
     const fit = new FitAddon();
@@ -146,6 +148,28 @@ export const TerminalView = ({
     term.loadAddon(unicode11);
     term.unicode.activeVersion = "11";
     term.open(containerRef.current!);
+
+    // 右键复制:阻止原生右键菜单,把选区(无选区时右击选中的单词)写入剪贴板。
+    // xterm 的 rightClickSelectsWord 已把选区文本填入内部 textarea 并聚焦选中,
+    // 这里在此基础上用 execCommand 同步复制(WebView2 可靠),失败时回退 Clipboard API。
+    const onTermContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      const text = term.getSelection();
+      if (!text) return;
+      try {
+        const ta = term.textarea;
+        if (ta) {
+          ta.value = text;
+          ta.focus();
+          ta.select();
+          if (document.execCommand("copy")) return;
+        }
+      } catch {
+        /* execCommand 失败时走 Clipboard API */
+      }
+      navigator.clipboard.writeText(text).catch(() => {});
+    };
+    term.element?.addEventListener("contextmenu", onTermContextMenu);
 
     // WebGL 渲染器:字形按网格坐标绘制,不受 DOM 渲染器 letter-spacing 的
     // 边界漂移影响(Chromium 对含 CJK 的行会把右边界逐格推偏,导致右边框
@@ -267,6 +291,7 @@ export const TerminalView = ({
       ro.disconnect();
       unlistenFns.forEach((f) => f());
       unSettingsChanged?.();
+      term.element?.removeEventListener("contextmenu", onTermContextMenu);
       term.dispose();
     };
   }, []);
