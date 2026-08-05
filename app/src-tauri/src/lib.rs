@@ -84,6 +84,7 @@ pub fn run() {
             shortcuts::set_shortcut,
             shortcuts::set_default_path,
             shortcuts::set_terminal_font_path,
+            shortcuts::resolve_terminal_font_path,
             ui::set_ui_settings,
             terminal::create_terminal,
             terminal::write_terminal,

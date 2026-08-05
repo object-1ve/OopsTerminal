@@ -104,6 +104,26 @@ Tauri 内置 **asset 协议**(`asset://localhost/<path>`),用于从本地文件�
 
 ## 4. 核心代码
 
+### 4.0 特殊场景:路径经过不受信任的 junction(Scoop `current`)⚠️
+
+用 Scoop 安装字体时,`C:\Users\<user>\scoop\apps\<app>\current` 是一个指向版本号目录的 **junction**。Windows 会把它视为「不受信任的装入点」,**拒绝遍历**该链接——文件管理器、`File::open`、asset 协议全部读不到 `current` 下的文件,`FontFace.load()` 挂起直到超时,终端回退默认字体。
+
+判断标准:`Test-Path ...\current\xxx.ttf` 返回 `False`,但 `...\<版本号>\xxx.ttf` 正常;`readlink`/PowerShell `(Get-Item ...\current).Target` 仍能读出链接指向(读取链接数据不需要遍历)。
+
+**修复:后端逐组件解析链接,把 `current` 解析成真实版本目录后再加载。**
+
+```rust
+// 关键点:
+// 1. 用 symlink_metadata 判断 reparse point(不要用 metadata,它会跟随链接被拒绝)
+// 2. fs::read_link 读取指向(不遍历,不受「不受信任装入点」影响)
+// 3. 去掉 read_link 返回的 \\?\ 前缀,拼出真实路径
+fn resolve_font_path(raw: &str) -> Result<PathBuf, String> { ... }
+```
+
+前端加载前先调用后端命令 `resolve_terminal_font_path` 拿到真实路径,再 `convertFileSrc` + `FontFace`;保存设置时后端也先解析校验,路径不可用当场报中文错误,不再静默存坏路径。
+
+> 另外,Scoop 安装的字体通常也已注册到系统(如 `C:\Users\<user>\AppData\Local\Microsoft\Windows\Fonts\`),可引导用户去那里选文件,完全绕开 junction。
+
 ### 4.1 tauri.conf.json:开启 asset 协议
 
 ```json

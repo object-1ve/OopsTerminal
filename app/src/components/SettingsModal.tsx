@@ -38,7 +38,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 /** 尝试加载字体文件,返回错误信息(空字符串表示成功)。 */
 async function verifyFontFile(path: string): Promise<string> {
   try {
-    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${convertFileSrc(path)})`);
+    // 先由后端解析 junction/符号链接(如 Scoop 的 current 目录),避免路径
+    // 经过不受信任装入点时 asset 协议读不到文件导致加载超时。
+    const realPath = await invoke<string>("resolve_terminal_font_path", { path });
+    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${convertFileSrc(realPath)})`);
     const loaded = await withTimeout(face.load(), FONT_LOAD_TIMEOUT, null);
     if (!loaded) return "字体加载超时,文件可能不存在或格式不受支持";
     document.fonts.add(loaded);
@@ -295,7 +298,7 @@ export const SettingsModal = ({
         </div>
 
         <p className="settings-hint">
-          点击输入框后按下组合键（如 Ctrl+Shift+K）。显示/隐藏快捷键可切换窗口显隐，留空表示禁用。默认启动路径留空表示使用用户主目录。终端字体文件支持 ttf/otf/woff/woff2，留空使用默认字体。
+          点击输入框后按下组合键（如 Ctrl+Shift+K）。显示/隐藏快捷键可切换窗口显隐，留空表示禁用。默认启动路径留空表示使用用户主目录。终端字体文件支持 ttf/otf/woff/woff2，留空使用默认字体。若通过浏览选择 Scoop 等目录中的字体提示“无法访问”（不受信任的装入点），可直接手动输入完整路径，应用会自动解析 current 链接到真实目录；系统已安装的字体也可在 C:\Users\用户名\AppData\Local\Microsoft\Windows\Fonts 中选择。
         </p>
 
         {error && <p className="settings-error">{error}</p>}

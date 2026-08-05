@@ -68,15 +68,24 @@ async function resolveTerminalFont(): Promise<FontResolve> {
     }
 
     console.log("[TerminalFont] 开始加载字体文件:", path);
+    // 先让后端解析 junction/符号链接并校验文件可用(如 Scoop 的 current 目录
+    // 是不受信任的装入点,直接读会超时),拿到真实路径后再走 asset 协议加载。
+    let realPath: string;
+    try {
+      realPath = await invoke<string>("resolve_terminal_font_path", { path });
+    } catch (e) {
+      console.warn("[TerminalFont] 字体路径解析失败:", e);
+      return { font: DEFAULT_FONT, applied: false, reason: "error" };
+    }
     // 通过 Tauri 内置 asset 协议加载本地字体文件(自带 CORS 处理)
-    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${convertFileSrc(path)})`);
+    const face = new FontFace(CUSTOM_FONT_FAMILY, `url(${convertFileSrc(realPath)})`);
     const loaded = await withTimeout(face.load(), FONT_LOAD_TIMEOUT, null);
     if (!loaded) {
       console.warn("[TerminalFont] 字体加载超时或失败,回退默认字体:", path);
       return { font: DEFAULT_FONT, applied: false, reason: "timeout" };
     }
     document.fonts.add(loaded);
-    console.log("[TerminalFont] 字体加载成功:", path);
+    console.log("[TerminalFont] 字体加载成功:", path, "->", realPath);
     return { font: `"${CUSTOM_FONT_FAMILY}", ${DEFAULT_FONT}`, applied: true, reason: "ok" };
   } catch (e) {
     console.warn("[TerminalFont] 读取设置失败,使用默认字体:", e);
