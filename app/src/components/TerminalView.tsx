@@ -162,12 +162,19 @@ export const TerminalView = ({
           ta.value = text;
           ta.focus();
           ta.select();
-          if (document.execCommand("copy")) return;
+          if (document.execCommand("copy")) {
+            // 与 PowerShell 一致:右键复制完成后清除选区高亮
+            term.clearSelection();
+            return;
+          }
         }
       } catch {
         /* execCommand 失败时走 Clipboard API */
       }
-      navigator.clipboard.writeText(text).catch(() => {});
+      navigator.clipboard.writeText(text).then(
+        () => term.clearSelection(),
+        () => {},
+      );
     };
     term.element?.addEventListener("contextmenu", onTermContextMenu);
 
