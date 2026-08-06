@@ -1,0 +1,126 @@
+.log-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.log-panel {
+  width: 560px;
+  max-width: calc(100vw - 48px);
+  max-height: 70vh;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 16px 20px;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.log-title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-h);
+}
+
+.log-refresh {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-h);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.log-refresh:hover {
+  background-color: var(--accent-bg);
+}
+
+.log-refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.log-path {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.7;
+  margin-bottom: 10px;
+  word-break: break-all;
+  user-select: text;
+}
+
+.log-error {
+  font-size: 12px;
+  color: #e81123;
+  margin-bottom: 10px;
+}
+
+.log-empty {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.7;
+  padding: 24px 0;
+  text-align: center;
+}
+
+.log-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 1;
+}
+
+.log-entry {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  padding: 6px 10px;
+}
+
+.log-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.log-entry-time {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.7;
+  font-family: var(--mono);
+}
+
+.log-entry-id {
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.log-entry-content {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: var(--mono);
+  color: var(--text-h);
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}

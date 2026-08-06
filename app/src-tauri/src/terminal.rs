@@ -365,6 +365,72 @@ fn append_input_log(path: &std::path::Path, id: u32, content: &str) -> std::io::
     file.flush()
 }
 
+/// 输入日志的读取结果:文件路径 + 解析后的记录(最新在前)。
+#[derive(serde::Serialize)]
+pub struct InputLogData {
+    /// 日志文件绝对路径。
+    path: String,
+    /// 解析后的记录,按时间倒序(最新在前)。
+    entries: Vec<InputLogEntry>,
+}
+
+#[derive(serde::Serialize)]
+pub struct InputLogEntry {
+    time: String,
+    id: u32,
+    content: String,
+}
+
+/// 读取输入日志文件,返回解析后的记录(最新在前)。
+///
+/// 损坏的行会被跳过;只返回最近 MAX 条,避免日志过大时拖慢界面。
+#[tauri::command]
+pub fn read_input_log(
+    app: AppHandle,
+    state: State<'_, TerminalManager>,
+) -> Result<InputLogData, String> {
+    const MAX_ENTRIES: usize = 2000;
+
+    let path = state
+        .log_path
+        .lock()
+        .unwrap()
+        .clone()
+        .or_else(|| app.path().app_data_dir().ok().map(|d| d.join("input_log.jsonl")))
+        .ok_or_else(|| "无法确定日志文件位置".to_string())?;
+
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(InputLogData {
+            path: path.to_string_lossy().to_string(),
+            entries: Vec::new(),
+        }),
+        Err(e) => return Err(format!("读取日志失败: {e}")),
+    };
+
+    let mut entries: Vec<InputLogEntry> = text
+        .lines()
+        .filter_map(|line| {
+            let v: serde_json::Value = serde_json::from_str(line).ok()?;
+            Some(InputLogEntry {
+                time: v.get("time")?.as_str()?.to_string(),
+                id: v.get("id")?.as_u64().map(|x| x as u32)?,
+                content: v.get("content")?.as_str()?.to_string(),
+            })
+        })
+        .rev()
+        .take(MAX_ENTRIES)
+        .collect();
+
+    // 确保至少返回文件存在与否的信息;空文件返回空列表
+    entries.shrink_to_fit();
+
+    Ok(InputLogData {
+        path: path.to_string_lossy().to_string(),
+        entries,
+    })
+}
+
 #[tauri::command]
 pub fn write_terminal(
     state: State<'_, TerminalManager>,
@@ -544,6 +610,38 @@ mod tests {
 
         let v1: serde_json::Value = serde_json::from_str(lines[1]).expect("line 1 json");
         assert_eq!(v1["content"], "ls -la\r");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 读取日志:条目按最新在前返回,坏行被跳过。
+    #[test]
+    fn input_log_reads_back_latest_first() {
+        let dir = unique_dir("logread");
+        let path = dir.join("input_log.jsonl");
+
+        append_input_log(&path, 1, "first\r").expect("append 1");
+        append_input_log(&path, 1, "second\r").expect("append 2");
+        // 混入一行坏数据,读取时应跳过
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(b"not-json\n")
+            .unwrap();
+        append_input_log(&path, 2, "third\r").expect("append 3");
+
+        let text = std::fs::read_to_string(&path).expect("read log");
+        let entries: Vec<serde_json::Value> = text
+            .lines()
+            .filter_map(|l| serde_json::from_str(l).ok())
+            .rev()
+            .collect();
+        // 坏行被过滤后,应剩 3 条,最新在前
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0]["content"], "third\r");
+        assert_eq!(entries[1]["content"], "second\r");
+        assert_eq!(entries[2]["content"], "first\r");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

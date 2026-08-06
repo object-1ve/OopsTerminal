@@ -4,7 +4,13 @@ import "./TitleBar.css";
 
 const appWindow = getCurrentWindow();
 
-export const TitleBar = ({ onOpenSettings }: { onOpenSettings: () => void }) => {
+export const TitleBar = ({
+  onOpenSettings,
+  onOpenLog,
+}: {
+  onOpenSettings: () => void;
+  onOpenLog: () => void;
+}) => {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
 
@@ -42,6 +48,11 @@ export const TitleBar = ({ onOpenSettings }: { onOpenSettings: () => void }) => 
     <div className="titlebar" data-tauri-drag-region>
       <div className="titlebar-drag-region" data-tauri-drag-region>
         OopsTerminal
+      </div>
+      <div className="titlebar-button" id="titlebar-log" onClick={onOpenLog} title="输入记录">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 3h12l4 4v14H4V3zm4 4h6v2H8V7zm0 4h10v2H8v-2zm0 4h10v2H8v-2zM14.5 3.5V7H18l-3.5-3.5z" />
+        </svg>
       </div>
       <div
         className={`titlebar-button ${isPinned ? "active" : ""}`}

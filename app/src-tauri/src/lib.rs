@@ -91,6 +91,7 @@ pub fn run() {
             terminal::resize_terminal,
             terminal::kill_terminal,
             terminal::get_terminal_cwd,
+            terminal::read_input_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
