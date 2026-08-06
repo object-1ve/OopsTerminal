@@ -1,12 +1,15 @@
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Manages all running terminal sessions (one per tab).
 pub struct TerminalManager {
     inner: Mutex<Inner>,
+    /// 用户输入日志文件路径(JSONL)。None 表示尚未初始化。
+    log_path: Mutex<Option<PathBuf>>,
 }
 
 struct Inner {
@@ -29,6 +32,7 @@ impl Default for TerminalManager {
                 sessions: HashMap::new(),
                 next_id: 1,
             }),
+            log_path: Mutex::new(None),
         }
     }
 }
@@ -205,6 +209,17 @@ pub fn create_terminal(
         .map_err(|e| format!("打开 PTY 失败: {e}"))?;
 
     let start_cwd = resolve_cwd(&settings, cwd);
+
+    // 初始化用户输入日志文件路径(与应用数据目录同处,只初始化一次)
+    {
+        let mut log_guard = state.log_path.lock().unwrap();
+        if log_guard.is_none() {
+            if let Ok(dir) = app.path().app_data_dir() {
+                *log_guard = Some(dir.join("input_log.jsonl"));
+            }
+        }
+    }
+
     let mut cmd = CommandBuilder::new(default_shell());
     cmd.cwd(&start_cwd);
     let child = pair
@@ -332,6 +347,24 @@ pub fn get_terminal_cwd(state: State<'_, TerminalManager>, id: u32) -> Option<St
     Some(session.cwd.to_string_lossy().to_string())
 }
 
+/// 把一次用户输入追加到 JSONL 日志文件。
+///
+/// 每行一个 JSON 对象:`{"time": <RFC3339 本地时间>, "id": <会话id>, "content": <输入>}`。
+/// 写失败时仅记录告警,不影响终端本身。
+fn append_input_log(path: &std::path::Path, id: u32, content: &str) -> std::io::Result<()> {
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    let line = serde_json::json!({
+        "time": chrono::Local::now().to_rfc3339(),
+        "id": id,
+        "content": content,
+    });
+    writeln!(file, "{}", line)?;
+    file.flush()
+}
+
 #[tauri::command]
 pub fn write_terminal(
     state: State<'_, TerminalManager>,
@@ -350,7 +383,16 @@ pub fn write_terminal(
     session
         .writer
         .flush()
-        .map_err(|e| format!("写入失败: {e}"))
+        .map_err(|e| format!("写入失败: {e}"))?;
+
+    // 记录用户输入到本地日志(写入 PTY 成功后追加,失败不影响终端)
+    if let Some(path) = state.log_path.lock().unwrap().clone() {
+        if let Err(e) = append_input_log(&path, id, &data) {
+            log::warn!("写入输入日志失败 ({}): {e}", path.display());
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -480,6 +522,30 @@ mod tests {
     #[test]
     fn parses_root_prompt() {
         assert_eq!(parse_prompt_cwd("PS C:\\> "), Some("C:\\".into()));
+    }
+
+    /// 输入日志:每行都是合法 JSON,包含本地时间与输入内容。
+    #[test]
+    fn input_log_writes_valid_jsonl() {
+        let dir = unique_dir("log");
+        let path = dir.join("input_log.jsonl");
+
+        append_input_log(&path, 7, "cd C:\\proj\r").expect("append 1");
+        append_input_log(&path, 7, "ls -la\r").expect("append 2");
+
+        let text = std::fs::read_to_string(&path).expect("read log");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 2, "每行一条记录");
+
+        let v0: serde_json::Value = serde_json::from_str(lines[0]).expect("line 0 json");
+        assert!(v0["time"].is_string(), "time 字段存在");
+        assert_eq!(v0["id"], 7);
+        assert_eq!(v0["content"], "cd C:\\proj\r");
+
+        let v1: serde_json::Value = serde_json::from_str(lines[1]).expect("line 1 json");
+        assert_eq!(v1["content"], "ls -la\r");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// 提示符文本被 ANSI/网络分块拆开时,tail 应能跨块拼出完整提示符。

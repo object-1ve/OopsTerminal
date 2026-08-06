@@ -29,6 +29,7 @@ tauri-plugin-global-shortcut = "2"
 portable-pty = "0.9.0"
 tauri-plugin-dialog = "2"
 base64 = "0.23.0"
+chrono = "0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61", features = [
