@@ -18,6 +18,8 @@ struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    /// 当前工作目录,随 PowerShell 提示符渲染实时更新。
+    cwd: std::path::PathBuf,
 }
 
 impl Default for TerminalManager {
@@ -92,175 +94,95 @@ fn resolve_cwd(settings: &crate::shortcuts::SettingsState, cwd: Option<String>) 
     default_cwd(settings)
 }
 
-/// 读取指定进程的当前工作目录。
+/// 去掉 ANSI 转义序列,得到纯文本输出。
 ///
-/// Windows x64 下通过 PEB 的 ProcessParameters.CurrentDirectory 读取,与
-/// Windows Terminal 的做法一致:不向终端注入命令、不解析输出。进程已退出、
-/// 权限不足或非 x64 平台时返回 None,上层回退到默认目录。
-#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-mod win_cwd {
-    use std::ffi::c_void;
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
-    use windows::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
-    };
-
-    const PROCESS_BASIC_INFORMATION: u32 = 0;
-
-    #[link(name = "ntdll")]
-    extern "system" {
-        fn NtQueryInformationProcess(
-            process_handle: HANDLE,
-            process_information_class: u32,
-            process_information: *mut c_void,
-            process_information_length: u32,
-            return_length: *mut u32,
-        ) -> i32;
-    }
-
-    /// x64 PEB 中 ProcessParameters 指针的偏移。
-    const PEB_PROCESS_PARAMETERS_OFFSET: usize = 0x20;
-
-    #[repr(C)]
-    struct ProcessBasicInformation {
-        reserved1: *mut c_void,
-        peb_base_address: *mut c_void,
-        reserved2: [*mut c_void; 2],
-        unique_process_id: *mut c_void,
-        reserved3: *mut c_void,
-    }
-
-    #[derive(Copy, Clone)]
-    #[repr(C)]
-    struct UnicodeString {
-        length: u16,
-        maximum_length: u16,
-        buffer: *mut u16,
-    }
-
-    #[derive(Copy, Clone)]
-    #[repr(C)]
-    struct CurDir {
-        dos_path: UnicodeString,
-        handle: *mut c_void,
-    }
-
-    /// 只读前 0x58 字节即可取到 CurrentDirectory.DosPath(x64 布局)。
-    #[derive(Copy, Clone)]
-    #[repr(C)]
-    struct RtlUserProcessParameters {
-        maximum_length: u32,
-        length: u32,
-        flags: u32,
-        debug_flags: u32,
-        console_handle: *mut c_void,
-        console_flags: u32,
-        standard_input: *mut c_void,
-        standard_output: *mut c_void,
-        standard_error: *mut c_void,
-        current_directory: CurDir,
-        dll_path: UnicodeString,
-    }
-
-    struct HandleGuard(HANDLE);
-
-    impl Drop for HandleGuard {
-        fn drop(&mut self) {
-            unsafe {
-                let _ = CloseHandle(self.0);
+/// 只处理 CSI(`ESC [ ... final byte`)与 OSC(`ESC ] ... BEL|ESC \`),
+/// 其他 ESC 前缀(如 `ESC 7` / `ESC 8`)直接丢弃 ESC 本身。
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\x1b' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek() {
+            Some('[') => {
+                chars.next();
+                // 消费到 CSI 的最终字节(@ ~ ~ 范围)
+                for c2 in chars.by_ref() {
+                    if ('\x40'..='\x7e').contains(&c2) {
+                        break;
+                    }
+                }
             }
+            Some(']') => {
+                chars.next();
+                // 消费到 BEL(0x07)或 ESC \(ST)
+                loop {
+                    match chars.next() {
+                        Some('\x07') => break,
+                        Some('\x1b') => {
+                            if chars.next() == Some('\\') {
+                                break;
+                            }
+                        }
+                        Some(_) => continue,
+                        None => break,
+                    }
+                }
+            }
+            _ => { /* 其他 ESC 序列,丢弃 ESC 继续 */ }
         }
     }
+    out
+}
 
-    unsafe fn read_memory<T: Copy>(handle: HANDLE, address: *const c_void) -> Option<T> {
-        let mut value: T = std::mem::zeroed();
-        let size = std::mem::size_of::<T>();
-        let mut read = 0usize;
-        ReadProcessMemory(
-            handle,
-            address,
-            (&mut value as *mut T).cast(),
-            size,
-            Some(&mut read),
-        )
-        .ok()?;
-        (read == size).then_some(value)
+/// 判断一段文本是否形如文件系统路径(盘符路径或 UNC 路径)。
+fn looks_like_path(text: &str) -> bool {
+    let b = text.as_bytes();
+    (b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/'))
+        || (b.len() >= 2 && b[0] == b'\\' && b[1] == b'\\')
+}
+
+/// 从一行提示符文本解析出 PowerShell 当前目录。
+///
+/// 默认提示符形如 `PS C:\path> `(嵌套时 `>> `)。只识别文件系统路径;
+/// 位于其他 provider(如 `PS Env:> `)或用户自定义提示符时返回 None。
+fn parse_prompt_line(line: &str) -> Option<String> {
+    let body = line
+        .strip_prefix("PS ")
+        .or_else(|| line.strip_prefix("PS\t"))?;
+    let trimmed = body.trim_end_matches(' ');
+    let t = trimmed.as_bytes();
+    // 找到结尾的箭头串(> 或 >>),箭头之前是路径
+    let mut j = t.len();
+    while j > 0 && t[j - 1] == b'>' {
+        j -= 1;
     }
+    if j == t.len() {
+        return None; // 没有箭头,不是提示符
+    }
+    let path = &trimmed[..j];
+    let path = path.trim_end_matches(' ').trim_end_matches('\r');
+    if path.is_empty() || !looks_like_path(path) {
+        return None;
+    }
+    Some(path.to_string())
+}
 
-    /// 查询指定进程的当前工作目录(带盘符的绝对路径)。
-    pub fn process_cwd(pid: u32) -> Option<String> {
-        unsafe {
-            let handle = OpenProcess(
-                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-                false,
-                pid,
-            )
-            .ok()?;
-            let _guard = HandleGuard(handle);
-
-            let mut pbi: ProcessBasicInformation = std::mem::zeroed();
-            let status = NtQueryInformationProcess(
-                handle,
-                PROCESS_BASIC_INFORMATION,
-                (&mut pbi as *mut ProcessBasicInformation).cast(),
-                std::mem::size_of::<ProcessBasicInformation>() as u32,
-                std::ptr::null_mut(),
-            );
-            if status != 0 || pbi.peb_base_address.is_null() {
-                return None;
-            }
-
-            let params_ptr: *mut c_void =
-                read_memory(handle, (pbi.peb_base_address as usize + PEB_PROCESS_PARAMETERS_OFFSET) as *const c_void)?;
-            if params_ptr.is_null() {
-                return None;
-            }
-
-            let params: RtlUserProcessParameters = read_memory(handle, params_ptr)?;
-            let dos_path = params.current_directory.dos_path;
-            let len = dos_path.length as usize;
-            if dos_path.buffer.is_null() || len == 0 || len % 2 != 0 {
-                return None;
-            }
-
-            let mut buf = vec![0u16; len / 2];
-            let mut read = 0usize;
-            ReadProcessMemory(
-                handle,
-                dos_path.buffer.cast(),
-                buf.as_mut_ptr().cast(),
-                len,
-                Some(&mut read),
-            )
-            .ok()?;
-            if read != len {
-                return None;
-            }
-
-            let cwd = String::from_utf16(&buf).ok()?;
-            if cwd.is_empty() {
-                None
-            } else {
-                Some(cwd)
-            }
+/// 从终端输出文本中解析出最近一次 PowerShell 提示符里的当前目录。
+///
+/// 先去掉 ANSI 序列(PSReadLine 可能给路径上色),再按行反向匹配
+/// `PS <路径>> `。找不到(自定义提示符等)返回 None,调用方回退默认目录。
+fn parse_prompt_cwd(text: &str) -> Option<String> {
+    let stripped = strip_ansi(text);
+    for line in stripped.lines().rev() {
+        if let Some(path) = parse_prompt_line(line) {
+            return Some(path);
         }
     }
-}
-
-#[cfg(all(target_os = "windows", not(target_arch = "x86_64")))]
-mod win_cwd {
-    /// PEB 偏移与参数块布局按 x64 定义,其他架构(32 位 / ARM64)直接回退。
-    pub fn process_cwd(_pid: u32) -> Option<String> {
-        None
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-mod win_cwd {
-    pub fn process_cwd(_pid: u32) -> Option<String> {
-        None
-    }
+    None
 }
 
 #[tauri::command]
@@ -282,8 +204,9 @@ pub fn create_terminal(
         })
         .map_err(|e| format!("打开 PTY 失败: {e}"))?;
 
+    let start_cwd = resolve_cwd(&settings, cwd);
     let mut cmd = CommandBuilder::new(default_shell());
-    cmd.cwd(resolve_cwd(&settings, cwd));
+    cmd.cwd(&start_cwd);
     let child = pair
         .slave
         .spawn_command(cmd)
@@ -309,6 +232,7 @@ pub fn create_terminal(
                 master: pair.master,
                 writer,
                 child,
+                cwd: start_cwd,
             },
         );
         id
@@ -320,6 +244,8 @@ pub fn create_terminal(
     std::thread::spawn(move || {
         let mut pending: Vec<u8> = Vec::new();
         let mut buf = [0u8; 8192];
+        // 最近一段已解码输出,用于识别 PowerShell 提示符并同步目录
+        let mut tail = String::new();
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break, // EOF: 进程已退出
@@ -328,6 +254,7 @@ pub fn create_terminal(
                     // 只发送完整的 UTF-8 序列,避免跨包截断产生乱码
                     match std::str::from_utf8(&pending) {
                         Ok(s) => {
+                            update_cwd_from_output(&exit_app, id, s, &mut tail);
                             let _ = app_handle.emit(
                                 "terminal-output",
                                 TerminalOutput {
@@ -341,6 +268,7 @@ pub fn create_terminal(
                             let valid = e.valid_up_to();
                             if valid > 0 {
                                 let s = std::str::from_utf8(&pending[..valid]).unwrap();
+                                update_cwd_from_output(&exit_app, id, s, &mut tail);
                                 let _ = app_handle.emit(
                                     "terminal-output",
                                     TerminalOutput {
@@ -366,6 +294,34 @@ pub fn create_terminal(
     Ok(id)
 }
 
+/// 把一段已解码的终端输出并入 tail,从中识别 PowerShell 提示符里的目录。
+/// 返回最近一次识别到的目录;未识别到返回 None。
+///
+/// 单独拆出便于单元测试;真正的状态更新由调用方完成。
+fn parse_tracked_cwd(decoded: &str, tail: &mut String) -> Option<String> {
+    const MAX_TAIL: usize = 4096;
+    tail.push_str(decoded);
+    if tail.len() > MAX_TAIL {
+        tail.drain(..tail.len() - MAX_TAIL);
+    }
+    if !tail.contains("PS ") {
+        return None;
+    }
+    parse_prompt_cwd(tail)
+}
+
+/// 把输出并入 tail 并同步会话的 cwd。识别失败不影响输出转发。
+fn update_cwd_from_output(app: &AppHandle, id: u32, decoded: &str, tail: &mut String) {
+    let Some(cwd) = parse_tracked_cwd(decoded, tail) else {
+        return;
+    };
+    if let Some(mgr) = app.try_state::<TerminalManager>() {
+        if let Some(session) = mgr.inner.lock().unwrap().sessions.get_mut(&id) {
+            session.cwd = std::path::PathBuf::from(&cwd);
+        }
+    }
+}
+
 /// 查询指定终端会话当前的工作目录。
 /// 用于"双击标签以相同路径新建终端"。读取失败时返回 None,
 /// 前端回退到默认目录。
@@ -373,8 +329,7 @@ pub fn create_terminal(
 pub fn get_terminal_cwd(state: State<'_, TerminalManager>, id: u32) -> Option<String> {
     let inner = state.inner.lock().unwrap();
     let session = inner.sessions.get(&id)?;
-    let pid = session.child.process_id()?;
-    win_cwd::process_cwd(pid)
+    Some(session.cwd.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -433,41 +388,152 @@ pub fn kill_terminal(state: State<'_, TerminalManager>, id: u32) {
 mod tests {
     use super::*;
 
-    /// 真实环境验证:能通过 PEB 读取其他进程的当前工作目录。
-    /// 这是"双击标签以相同路径新建终端"的核心依赖。
-    #[test]
-    fn reads_other_process_cwd() {
-        let dir = std::env::temp_dir().join(format!("oops-term-cwd-{}", std::process::id()));
+    fn make_settings(default_path: Option<String>) -> crate::shortcuts::SettingsState {
+        crate::shortcuts::SettingsState(std::sync::Mutex::new(crate::db::Settings {
+            toggle_window_shortcut: None,
+            quit_shortcut: None,
+            default_path,
+            show_tray_icon: true,
+            show_taskbar_icon: false,
+            terminal_font_path: None,
+        }))
+    }
+
+    fn unique_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("oops-term-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
 
-        // 以指定目录启动一个短暂存活的 PowerShell 进程
-        let mut child = std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-Command", "Start-Sleep -Seconds 10"])
-            .current_dir(&dir)
-            .spawn()
-            .expect("spawn powershell");
+    /// 规范化路径:canonicalize 展开短名 / 8.3 名,再去掉结尾反斜杠,便于比较。
+    fn normalized(p: &std::path::Path) -> String {
+        std::fs::canonicalize(p)
+            .unwrap_or_else(|_| p.to_path_buf())
+            .to_string_lossy()
+            .trim_end_matches('\\')
+            .to_string()
+    }
 
-        // 等待进程完成初始化,确保 PEB 的进程参数已就绪
-        std::thread::sleep(std::time::Duration::from_millis(500));
+    // ---------- parse_prompt_cwd 单元测试 ----------
 
-        let cwd = win_cwd::process_cwd(child.id());
-        let _ = child.kill();
-        let _ = child.wait();
+    #[test]
+    fn parses_default_prompt() {
+        assert_eq!(
+            parse_prompt_cwd("PS C:\\Users\\me\\proj> "),
+            Some("C:\\Users\\me\\proj".into())
+        );
+    }
 
-        let _ = std::fs::remove_dir_all(&dir);
+    #[test]
+    fn parses_prompt_with_ansi_colors() {
+        // PSReadLine 可能给路径上色:PS <ESC>[36mC:\path<ESC>[0m>
+        let s = "\x1b[4;1H\x1b[?25hPS \x1b[36mC:\\Users\\me\\proj\x1b[0m> ";
+        assert_eq!(parse_prompt_cwd(s), Some("C:\\Users\\me\\proj".into()));
+    }
 
-        let expected = std::fs::canonicalize(&dir).unwrap_or(dir);
-        let expected_str = expected.to_string_lossy().to_string();
-        match cwd {
-            Some(actual) => {
-                let actual_trimmed = actual.trim_end_matches('\\');
-                assert!(
-                    actual_trimmed.eq_ignore_ascii_case(&expected_str),
-                    "cwd mismatch: actual={actual} expected={expected_str}"
-                );
-            }
-            None => panic!("process_cwd 未能读取进程工作目录"),
-        }
+    #[test]
+    fn parses_nested_prompt() {
+        assert_eq!(parse_prompt_cwd("PS C:\\a\\b>> "), Some("C:\\a\\b".into()));
+    }
+
+    #[test]
+    fn parses_unc_prompt() {
+        assert_eq!(
+            parse_prompt_cwd("PS \\\\server\\share\\dir> "),
+            Some("\\\\server\\share\\dir".into())
+        );
+    }
+
+    #[test]
+    fn parses_path_with_spaces() {
+        assert_eq!(
+            parse_prompt_cwd("PS C:\\Program Files\\Some App> "),
+            Some("C:\\Program Files\\Some App".into())
+        );
+    }
+
+    #[test]
+    fn ignores_non_filesystem_provider_prompt() {
+        assert_eq!(parse_prompt_cwd("PS Env:> "), None);
+        assert_eq!(parse_prompt_cwd("PS HKLM:\\Software> "), None);
+    }
+
+    #[test]
+    fn ignores_custom_prompt() {
+        assert_eq!(parse_prompt_cwd("PS> "), None);
+        assert_eq!(parse_prompt_cwd("user@host:~$ "), None);
+    }
+
+    #[test]
+    fn picks_latest_prompt() {
+        let s = "PS C:\\old> \r\nPS C:\\new> ";
+        assert_eq!(parse_prompt_cwd(s), Some("C:\\new".into()));
+    }
+
+    #[test]
+    fn strips_osc_title_sequence() {
+        let s = "\x1b]0;powershell.exe\x07PS C:\\x> ";
+        assert_eq!(parse_prompt_cwd(s), Some("C:\\x".into()));
+    }
+
+    #[test]
+    fn parses_root_prompt() {
+        assert_eq!(parse_prompt_cwd("PS C:\\> "), Some("C:\\".into()));
+    }
+
+    /// 提示符文本被 ANSI/网络分块拆开时,tail 应能跨块拼出完整提示符。
+    #[test]
+    fn parse_tracked_cwd_across_chunks() {
+        let mut tail = String::new();
+        // 初始:启动输出与第一个提示符的前半段
+        assert_eq!(parse_tracked_cwd("Windows PowerShell\r\nPS ", &mut tail), None);
+        // 路径前半
+        assert_eq!(parse_tracked_cwd("C:\\Users\\me\\pr", &mut tail), None);
+        // 路径后半 + 箭头(注意路径在箭头前,直接拼接)
+        assert_eq!(
+            parse_tracked_cwd("oj> ", &mut tail),
+            Some("C:\\Users\\me\\proj".into())
+        );
+        // 同一目录重复出现,结果一致
+        assert_eq!(
+            parse_tracked_cwd("\r\nPS C:\\Users\\me\\proj> ", &mut tail),
+            Some("C:\\Users\\me\\proj".into())
+        );
+        // 之后 cd 到新目录,解析出新路径
+        assert_eq!(
+            parse_tracked_cwd("\r\nPS C:\\Users\\me\\other> ", &mut tail),
+            Some("C:\\Users\\me\\other".into())
+        );
+    }
+
+    /// resolve_cwd:显式 cwd 优先;无效 / 空白 / 缺失时回退默认路径。
+    #[test]
+    fn resolve_cwd_override_then_fallback() {
+        let over = unique_dir("ovr");
+        let def = unique_dir("def");
+        let settings = make_settings(Some(def.to_string_lossy().to_string()));
+        let over_s = over.to_string_lossy().to_string();
+
+        // 显式目录有效时优先
+        assert_eq!(
+            normalized(&resolve_cwd(&settings, Some(over_s.clone()))),
+            normalized(&over)
+        );
+        // 无效目录回退默认
+        assert_eq!(
+            normalized(&resolve_cwd(&settings, Some(r"Z:\oops\missing\dir".into()))),
+            normalized(&def)
+        );
+        // 空白字符串回退默认
+        assert_eq!(
+            normalized(&resolve_cwd(&settings, Some("   ".into()))),
+            normalized(&def)
+        );
+        // 未传回退默认
+        assert_eq!(normalized(&resolve_cwd(&settings, None)), normalized(&def));
+
+        let _ = std::fs::remove_dir_all(&over);
+        let _ = std::fs::remove_dir_all(&def);
     }
 }
