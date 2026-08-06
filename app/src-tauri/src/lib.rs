@@ -90,6 +90,7 @@ pub fn run() {
             terminal::write_terminal,
             terminal::resize_terminal,
             terminal::kill_terminal,
+            terminal::get_terminal_cwd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

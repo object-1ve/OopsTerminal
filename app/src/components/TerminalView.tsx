@@ -122,18 +122,24 @@ function applyTerminalFont(
 export const TerminalView = ({
   active,
   onSessionId,
+  startCwd,
 }: {
   active: boolean;
   onSessionId: (sessionId: number) => void;
+  startCwd?: string;
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sessionIdRef = useRef<number | null>(null);
   const onSessionIdRef = useRef(onSessionId);
+  const startCwdRef = useRef(startCwd);
   useEffect(() => {
     onSessionIdRef.current = onSessionId;
   }, [onSessionId]);
+  useEffect(() => {
+    startCwdRef.current = startCwd;
+  }, [startCwd]);
 
   useEffect(() => {
     const term = new Terminal({
@@ -255,7 +261,11 @@ export const TerminalView = ({
         }
         const cols = term.cols || 80;
         const rows = term.rows || 24;
-        const id = await invoke<number>("create_terminal", { cols, rows });
+        const id = await invoke<number>("create_terminal", {
+          cols,
+          rows,
+          cwd: startCwdRef.current ?? null,
+        });
         if (disposed) {
           invoke("kill_terminal", { id }).catch(() => {});
           return;

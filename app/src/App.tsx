@@ -13,12 +13,27 @@ function App() {
   const [tabs, setTabs] = useState<Tab[]>([{ key: 1, sessionId: null }])
   const [activeKey, setActiveKey] = useState<number>(1)
 
-  const addTab = useCallback(() => {
+  const addTab = useCallback((cwd?: string) => {
     keySeq.current += 1
     const key = keySeq.current
-    setTabs((t) => [...t, { key, sessionId: null }])
+    setTabs((t) => [...t, { key, sessionId: null, startCwd: cwd }])
     setActiveKey(key)
   }, [])
+
+  // 双击标签:读取源终端的当前目录,以相同路径新建一个终端
+  const duplicateTab = useCallback(
+    (key: number) => {
+      const tab = tabs.find((x) => x.key === key)
+      if (tab?.sessionId == null) {
+        addTab()
+        return
+      }
+      invoke<string | null>('get_terminal_cwd', { id: tab.sessionId })
+        .then((cwd) => addTab(cwd ?? undefined))
+        .catch(() => addTab())
+    },
+    [tabs, addTab],
+  )
 
   const closeTab = useCallback(
     (key: number) => {
@@ -50,6 +65,7 @@ function App() {
         onSelect={setActiveKey}
         onClose={closeTab}
         onAdd={addTab}
+        onDuplicate={duplicateTab}
       />
       <div className="terminal-area">
         {tabs.map((tab) => (
@@ -57,7 +73,11 @@ function App() {
             key={tab.key}
             className={`terminal-pane ${tab.key === activeKey ? '' : 'hidden'}`}
           >
-            <TerminalView active={tab.key === activeKey} onSessionId={handleSessionId(tab.key)} />
+            <TerminalView
+              active={tab.key === activeKey}
+              onSessionId={handleSessionId(tab.key)}
+              startCwd={tab.startCwd}
+            />
           </div>
         ))}
         {tabs.length === 0 && <div className="terminal-empty">点击 + 新建终端</div>}
