@@ -94,10 +94,10 @@ fn resolve_cwd(settings: &crate::shortcuts::SettingsState, cwd: Option<String>) 
 
 /// 读取指定进程的当前工作目录。
 ///
-/// Windows 下通过 PEB 的 ProcessParameters.CurrentDirectory 读取,与
+/// Windows x64 下通过 PEB 的 ProcessParameters.CurrentDirectory 读取,与
 /// Windows Terminal 的做法一致:不向终端注入命令、不解析输出。进程已退出、
-/// 权限不足或非 Windows 平台时返回 None,上层回退到默认目录。
-#[cfg(target_os = "windows")]
+/// 权限不足或非 x64 平台时返回 None,上层回退到默认目录。
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 mod win_cwd {
     use std::ffi::c_void;
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
@@ -245,6 +245,14 @@ mod win_cwd {
                 Some(cwd)
             }
         }
+    }
+}
+
+#[cfg(all(target_os = "windows", not(target_arch = "x86_64")))]
+mod win_cwd {
+    /// PEB 偏移与参数块布局按 x64 定义,其他架构(32 位 / ARM64)直接回退。
+    pub fn process_cwd(_pid: u32) -> Option<String> {
+        None
     }
 }
 
