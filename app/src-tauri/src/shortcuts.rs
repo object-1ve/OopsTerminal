@@ -426,9 +426,17 @@ mod tests {
     #[test]
     fn resolves_junction_to_real_path() {
         let base = test_base_dir("junction");
-        let real_dir = base.join("real/version1");
+        let real_dir = base.join("real").join("version1");
         std::fs::create_dir_all(&real_dir).unwrap();
         std::fs::write(real_dir.join("dummy.ttf"), b"font").unwrap();
+
+        // 期望前缀先 canonicalize 归一化:CI 上 TEMP 常返回 8.3 短名
+        // (如 RUNNER~1),而 junction 目标经 read_link 读出的是长名
+        // (runneradmin),两者指向同一目录但字符串不同,直接 starts_with
+        // 会误判失败。canonicalize 展开短名、统一分隔符后即可比较。
+        let canonical_real = std::fs::canonicalize(&real_dir).expect("canonicalize real dir");
+        #[cfg(windows)]
+        let canonical_real = strip_windows_prefix(&canonical_real);
 
         let link = base.join("current");
         let ps_script = format!(
@@ -449,10 +457,10 @@ mod tests {
         let via_link = link.join("dummy.ttf");
         let resolved = resolve_font_path(&via_link.to_string_lossy()).expect("resolve through junction");
         assert!(
-            resolved.starts_with(&real_dir),
+            resolved.starts_with(&canonical_real),
             "resolved={} expected prefix={}",
             resolved.display(),
-            real_dir.display()
+            canonical_real.display()
         );
         assert_eq!(resolved.extension().and_then(|e| e.to_str()), Some("ttf"));
         assert!(resolved.is_file(), "resolved file should be readable");
