@@ -56,7 +56,6 @@ OopsTerminal 是一款 Windows 优先的桌面终端应用。它用 Rust + Tauri
 │       │   └── db.rs             # SQLite 设置读写
 │       ├── tauri.conf.json       # Tauri 配置(窗口、打包目标、CSP)
 │       └── capabilities/         # 权限配置
-├── docs/                         # 技术方案与踩坑记录
 ├── .github/workflows/            # GitHub Actions(打标签自动构建发布)
 └── CHANGELOG.md                  # 变更记录
 ```
@@ -130,11 +129,6 @@ cargo test
 
 ## 相关文档
 
-- [docs/tauri-tray-taskbar.md](docs/tauri-tray-taskbar.md) — 托盘与任务栏图标控制(移除、切换、监听器累积等踩坑)
-- [docs/tauri-font-loading.md](docs/tauri-font-loading.md) — 本地字体文件加载方案(Tauri asset 协议 + FontFace)
-- [docs/tauri-window-state-sync.md](docs/tauri-window-state-sync.md) — 窗口显隐与状态同步
-- [docs/xterm-terminal-rendering.md](docs/xterm-terminal-rendering.md) — xterm 渲染排查记录
-- [docs/terminal-cjk-rendering-copy.md](docs/terminal-cjk-rendering-copy.md) — 中文渲染与右键复制
 - [CHANGELOG.md](CHANGELOG.md) — 版本变更记录
 
 ## 许可
