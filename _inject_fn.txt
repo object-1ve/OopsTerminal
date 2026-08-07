@@ -1,0 +1,100 @@
+﻿,
+                "allowed_tools_count": self.allowed_tools.as_ref().map(|tools| tools.len()),
+                "disabled_tools_count": self.disabled_tools.len(),
+                "tool_call_ids": self.tool_call_ids.len(),
+                "tool_result_ids": self.tool_result_ids.len(),
+                "last_usage": {
+                    "input": self.last_usage.input_tokens,
+                    "output": self.last_usage.output_tokens,
+                    "cache_read": self.last_usage.cache_read_input_tokens,
+                    "cache_write": self.last_usage.cache_creation_input_tokens,
+                },
+            }
+        })
+    }
+
+    /// Get soft interrupt previews (for debug visibility)
+    pub fn soft_interrupts_preview(&self) -> Vec<(String, bool)> {
+        self.soft_interrupt_queue
+            .lock()
+            .map(|q| {
+                q.iter()
+                    .take(10)
+                    .map(|m| {
+                        let preview = if m.content.len() > 100 {
+                            format!("{}...", crate::util::truncate_str(&m.content, 100))
+                        } else {
+                            m.content.clone()
+                        };
+                        (preview, m.urgent)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Inject all pending soft interrupt messages into the conversation.
+    /// Returns the combined message content and clears the queue.
+    pub(super) fn inject_soft_interrupts(&mut self) -> Vec<InjectedSoftInterrupt> {
+        let messages: Vec<SoftInterruptMessage> = {
+            let mut queue = match self.soft_interrupt_queue.lock() {
+                Ok(queue) => queue,
+                Err(_) => {
+                    logging::warn(&format!(
+                        "AGENT_SOFT_INTERRUPT_INJECT_LOCK_FAILED session={}",
+                        self.session_id()
+                    ));
+                    return Vec::new();
+                }
+            };
+            if queue.is_empty() {
+                return Vec::new();
+            }
+            logging::info(&format!(
+                "AGENT_SOFT_INTERRUPT_INJECT_DRAIN session={} pending_count={} urgent_count={} total_content_bytes={}",
+                self.session_id(),
+                queue.len(),
+                queue.iter().filter(|message| message.urgent).count(),
+                queue
+                    .iter()
+                    .map(|message| message.content.len())
+                    .sum::<usize>()
+            ));
+            queue.drain(..).collect()
+        };
+
+        let mut injected = Vec::new();
+        let mut current_source: Option<SoftInterruptSource> = None;
+        let mut current_parts: Vec<String> = Vec::new();
+        let mut current_images: Vec<(String, String)> = Vec::new();
+
+        let flush_group = |agent: &mut Self,
+                           injected: &mut Vec<InjectedSoftInterrupt>,
+                           source: SoftInterruptSource,
+                           parts: &mut Vec<String>,
+                           images: &mut Vec<(String, String)>| {
+            if parts.is_empty() && images.is_empty() {
+                return;
+            }
+            let content = parts.join("\n\n");
+            parts.clear();
+            let mut blocks: Vec<ContentBlock> = std::mem::take(images)
+                .into_iter()
+                .map(|(media_type, data)| ContentBlock::Image { media_type, data })
+                .collect();
+            if !content.is_empty() {
+                blocks.push(ContentBlock::Text {
+                    text: content.clone(),
+                    cache_control: None,
+                });
+            }
+            agent.add_message_with_display_role(
+                Role::User,
+                blocks,
+                soft_interrupt_session_display_role(source),
+            );
+            injected.push(InjectedSoftInterrupt { content, source });
+        };
+
+        for message in messages {
+      

@@ -38,30 +38,6 @@
   font-size: 13px;
 }
 
-.shortcut-box {
-  flex: 1;
-  height: 32px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--code-bg);
-  color: var(--text-h);
-  font-family: var(--mono);
-  font-size: 13px;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-.shortcut-box:hover {
-  border-color: var(--accent-border);
-}
-
-.shortcut-box.recording {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-  color: var(--accent);
-}
-
 .shortcut-clear {
   height: 32px;
   padding: 0 10px;

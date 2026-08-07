@@ -7,6 +7,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalView.css";
+import { scanInputChunk } from "./inputScanner";
 
 type TerminalOutput = { id: number; data: string };
 type TerminalExit = { id: number };
@@ -210,6 +211,7 @@ export const TerminalView = ({
     }
 
     let disposed = false;
+    let inputBuffer = "";
     const sessionIdRef: { current: number | null } = { current: null };
     const unlistenFns: (() => void)[] = [];
 
@@ -261,10 +263,12 @@ export const TerminalView = ({
         }
         const cols = term.cols || 80;
         const rows = term.rows || 24;
+        // 防御: startCwd 可能被历史状态污染成非字符串, 只传合法值
+        const cwdArg = typeof startCwdRef.current === "string" ? startCwdRef.current : null;
         const id = await invoke<number>("create_terminal", {
           cols,
           rows,
-          cwd: startCwdRef.current ?? null,
+          cwd: cwdArg,
         });
         if (disposed) {
           invoke("kill_terminal", { id }).catch(() => {});
@@ -281,6 +285,15 @@ export const TerminalView = ({
       const sid = sessionIdRef.current;
       if (sid != null) {
         invoke("write_terminal", { id: sid, data }).catch(() => {});
+      }
+
+      const scanned = scanInputChunk(inputBuffer, data);
+      inputBuffer = scanned.buf;
+      if (sid != null && scanned.lines.length > 0) {
+        const time = new Date().toISOString();
+        for (const command of scanned.lines) {
+          invoke("record_oops_history", { time, command }).catch(() => {});
+        }
       }
     });
 

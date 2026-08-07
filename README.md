@@ -1,10 +1,10 @@
 # OopsTerminal
 
-> 基于 Tauri 2 + React 19 + xterm.js 的轻量级桌面终端,可隐藏在托盘、通过全局快捷键随时唤起。
+> 基于 Tauri 2 + React 19 + xterm.js 的轻量级桌面终端,可隐藏在托盘、通过托盘菜单随时唤起。
 
 ![GitHub release](https://img.shields.io/github/v/release/object-1ve/OopsTerminal)
 
-OopsTerminal 是一款 Windows 优先的桌面终端应用。它用 Rust + Tauri 2 提供原生壳(ConPTY 拉起 PowerShell),用 React + TypeScript + Vite 构建界面,xterm.js 负责终端渲染。窗口默认不出现在任务栏,关闭即隐藏到托盘,配合可配置的全局快捷键,适合作为随叫随到的快速终端。
+OopsTerminal 是一款 Windows 优先的桌面终端应用。它用 Rust + Tauri 2 提供原生壳(ConPTY 拉起 PowerShell),用 React + TypeScript + Vite 构建界面,xterm.js 负责终端渲染。窗口默认不出现在任务栏,关闭即隐藏到托盘,适合作为随叫随到的快速终端。
 
 ## 特性
 
@@ -15,19 +15,19 @@ OopsTerminal 是一款 Windows 优先的桌面终端应用。它用 Rust + Tauri
 - **portable-pty 桥接** — Rust 侧通过 ConPTY 拉起 `powershell.exe`(Windows),字节流双向转发并按 UTF-8 安全分包,避免跨包截断乱码
 - **右键即复制** — 右键复制选中内容(无选区时选中光标处单词),行为对齐 PowerShell:复制完成后清除选区高亮
 - **自定义启动目录** — 可为新终端设置默认工作目录,留空使用用户主目录
+- **历史记录** — 标题栏入口展示时间和命令;OopsTerminal 会在终端输入层监听回车,把整行命令追加到 `%APPDATA%\OopsTerminal\history-with-time.jsonl`,不依赖 PowerShell profile 的 `AddToHistoryHandler`
 
 ### ⚙️ 设置(保存到本地 SQLite)
-- **全局快捷键** — 可配置「显示/隐藏窗口」与「退出程序」两个全局快捷键,录制时自动生成 Tauri 加速键格式,冲突时保留旧设置
 - **自定义字体** — 支持 ttf / otf / woff / woff2 本地字体文件,保存后已打开的终端实时应用;加载失败或超时优雅回退默认字体
 - **托盘与任务栏图标** — 独立控制托盘图标与任务栏按钮的显隐,改动立即生效
 
 ### 🎛️ 窗口与系统集成
-- **隐藏到后台** — 关闭窗口时隐藏而非退出,可通过全局快捷键或托盘菜单随时唤出
+- **隐藏到后台** — 关闭窗口时隐藏而非退出,可通过托盘菜单随时唤出
 - **单实例锁** — 重复启动时唤起已有实例,而不是再开一个进程
 - **系统托盘** — 左键单击切换窗口显隐,托盘菜单提供「显示/隐藏窗口」与「退出」
 - **任务栏图标隐藏** — 通过 `WS_EX_TOOLWINDOW` + `ITaskbarList::AddTab/DeleteTab` 双保险实现
 - **置顶按钮** — 标题栏图钉按钮可将窗口置顶
-- **无边框窗口** — 自定义标题栏(置顶 / 设置 / 最大化 / 最小化),每次启动自动居中
+- **无边框窗口** — 自定义标题栏(历史记录 / 置顶 / 设置 / 最大化 / 最小化),每次启动自动居中
 
 ## 技术栈
 
@@ -38,7 +38,7 @@ OopsTerminal 是一款 Windows 优先的桌面终端应用。它用 Rust + Tauri
 | 终端渲染 | [xterm.js](https://xtermjs.org) + Fit / Unicode 11 / WebGL 插件 |
 | PTY 桥接 | [portable-pty](https://github.com/wez/wezterm/tree/main/pty)(Windows 走 ConPTY) |
 | 设置存储 | rusqlite(SQLite) |
-| 插件 | 全局快捷键、单实例、文件对话框、日志 |
+| 插件 | 单实例、文件对话框、日志 |
 
 ## 目录结构
 
@@ -51,7 +51,8 @@ OopsTerminal 是一款 Windows 优先的桌面终端应用。它用 Rust + Tauri
 │       ├── src/
 │       │   ├── lib.rs            # 应用装配(插件、数据库、托盘、命令注册)
 │       │   ├── terminal.rs       # PTY 会话管理(创建/写入/调整尺寸/终止)
-│       │   ├── shortcuts.rs      # 全局快捷键与字体路径解析
+│       │   ├── history.rs        # OopsTerminal 时间历史 / PSReadLine 历史读取
+│       │   ├── shortcuts.rs      # 窗口显隐与字体路径解析
 │       │   ├── ui.rs             # 托盘与任务栏图标控制
 │       │   └── db.rs             # SQLite 设置读写
 │       ├── tauri.conf.json       # Tauri 配置(窗口、打包目标、CSP)
@@ -86,6 +87,16 @@ pnpm tbuild --bundles msi
 
 > 开发模式前端端口见 `src-tauri/tauri.conf.json` 的 `devUrl`(默认 `http://localhost:1420`)。
 
+## 带时间历史
+
+OopsTerminal 会在每次回车提交命令时,把整行命令追加到 `%APPDATA%\OopsTerminal\history-with-time.jsonl`,格式为 JSONL:
+
+```json
+{"time":"2026-08-07T10:00:00.000Z","command":"Set-Alias j jcode"}
+```
+
+写入采用增量追加,不修改 PowerShell 自己的 `ConsoleHost_history.txt`。历史弹窗优先读取该 JSONL;文件不存在时回退读取 PSReadLine 的 `ConsoleHost_history.txt`,因此旧终端/旧记录仍可展示。
+
 ## 常用脚本
 
 | 命令 | 说明 |
@@ -104,7 +115,7 @@ cd app/src-tauri
 cargo test
 ```
 
-测试覆盖设置读写(`db::tests`)与快捷键 / 字体路径解析(`shortcuts::tests`),其中 junction 解析测试会真实创建一个目录联接验证链接解析。
+测试覆盖设置读写(`db::tests`)与字体路径解析(`shortcuts::tests`),其中 junction 解析测试会真实创建一个目录联接验证链接解析。
 
 ## 打包与发布
 
@@ -118,8 +129,6 @@ cargo test
 
 | 设置项 | 说明 |
 |--------|------|
-| 显示/隐藏窗口快捷键 | 全局快捷键,留空禁用 |
-| 退出程序快捷键 | 全局快捷键,留空禁用 |
 | 终端默认启动路径 | 新终端的工作目录,留空使用用户主目录 |
 | 终端字体文件 | ttf / otf / woff / woff2 本地文件,留空使用默认字体 |
 | 显示托盘图标 | 默认开启 |

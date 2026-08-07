@@ -1,0 +1,92 @@
+﻿===== 1 =====
+ody":"瀹冪殑璺緞鍙互鍏堢畝鍖栨垚涓€鍙ヨ瘽锛氫富 agent 鍦?turn 缁撴潫鏃舵妸涓婁笅鏂囦涪缁?sidecar锛宻idecar 鍚庡彴妫€绱€佺淮鎶ゅ拰鐢熸垚 pending prompt锛屼笅涓€杞啀鎶婄粨鏋滄敞鍏ヤ富涓婁笅鏂囥€?杩欐潯璺敱涓夊潡浠ｇ爜鏀拺銆傜涓€鍧楁槸 MemoryAgentHandle锛屽畠鐢?try_send 鎶曢€掍
+===== 2 =====
+ion state銆乼urn count 鍜屾绱㈣妭濂忋€?process_context() 閲屼細鎶婁笂涓嬫枃杞垚妫€绱㈡潗鏂欙紝鎵惧埌鐩稿叧 memory 鍚庡彧鍐欏叆 pending prompt锛?// src/memory_agent.rs锛岃妭閫塡\nasync fn process_context( &mut self, session_id: &st
+===== 3 =====
+(prompt) = memory::format_relevant_prompt(&relevant, MAX_MEMORIES_PER_TURN) { memory::set_pending_memory_with_ids_and_display( session_id, prompt, count, ids, display_prompt, ); }\\n} 鈥滀笅
+===== 4 =====
+cade Store-->>Sidecar: relevant memories Sidecar->>Sidecar: build prompt Sidecar-->>Next: pending prompt 杩欐潯鐘舵€佹祦瑙ｉ噴浜嗕负浠€涔?memory 涓嶆槸鏅€?RAG锛氫富 turn 鍙姇閫掍笂涓嬫枃锛宻idecar 鍋氭绱㈠拰 prompt 缁勮銆傚綋
+===== 5 =====
+emory sidecar 鍙互瀵圭収 mini/04_memory_sidecar.py 銆傚畠鍙繚鐣欐湁鐣岄槦鍒椼€侀潪闃诲鎻愪氦銆佸悗鍙?worker銆佷笅涓€杞彇 pending prompt 杩欏洓涓姩浣溿€?鐪熷疄 JCode 澶氫簡 embedding銆乬raph銆乧ascade retrieval銆乸rompt budget 鍜?display 
+===== 6 =====
+od prompt;\\npub mod runner;\\npub mod scheduler; pub use directives::{add_directive, has_pending_directives, take_pending_directives};\\npub use manager::AmbientManager;\\npub use persis
+===== 7 =====
+ady_direct_items(); let should_run = ambient_allowed && (mgr.should_run() || ambient::has_pending_directives()); (should_run, ready_direct_items) } Err(_) => (false, Vec::new()), }; self.
+===== 8 =====
+(hash.clone()); manifest.canary_status = Some(build::CanaryStatus::Testing); manifest.set_pending_activation(build::PendingActivation { session_id: session_id.to_string(), new_version: ha
+===== 9 =====
+d_id.to_string(), session_id: session_id.to_string(), role, status: ReloadRecoveryStatus::Pending, directive, reason: reason.into(), created_at: chrono::Utc::now().to_rfc3339(), delivered
+===== 10 =====
+Session->>Build: request build / test Build-->>Session: usable binary Session->>Manifest: pending activation Session->>Server: reload signal Server-->>Session: handoff / recovery 涓よ竟閮界粫涓嶅
+===== 11 =====
+ate.py 銆?杩欎釜鏈€灏忓鐜板彧淇濈暀鍑犳潯闄愬埗锛氬繀椤昏繘鍏?canary session锛宐uild 涔嬪悗鎵嶈兘 reload锛屽苟涓?reload 鍓嶈鐣欎笅 pending activation 鍜?recovery context銆?Self-dev 鏄 JCode 鏀硅嚜宸便€?寤鸿闈炲父淇濆畧锛?鏂板缓鍒嗘敮銆?淇濇寔宸ヤ綔鍖哄共鍑€銆?
+===== 12 =====
+鏉ョ殑銆傛瘡鍔犱竴灞傦紝灏卞涓€缁勨€滅姸鎬佹斁鍦ㄥ摢閲屸€濈殑闂锛?鐘舵€佹斁鍦?client 杩樻槸 server锛?褰撳墠 turn 鍚屾鍋氾紝杩樻槸涓嬩竴杞娇鐢?pending result锛?宸ュ叿缁撴灉鐩存帴鍥炰笂涓嬫枃锛岃繕鏄厛鎴柇銆佽浆 content block锛?worker 鐘舵€佹斁鍦ㄨ亰澶╄褰曢噷锛岃繕鏄斁鍦?server pl
+===== 13 =====
+that retrieves in a sidecar and injects on the next turn Manual notes or a basic RAG demo pending memory Memory prompt prepared by the sidecar and waiting for the main agent to pick up Co
+===== 14 =====
+0 - 鍏ㄥ眬鍦板浘"},"150":{"body":"The memory sidecar does not block the current turn. It writes pending memory, and the main agent injects it on the next turn. One-turn delay is a design choice
+===== 15 =====
+nt) = self.messages_for_provider(); let tools = self.tool_definitions().await; let memory_pending = self.build_memory_prompt_nonblocking_shared(messages.clone(), None); let split_prompt =
+===== 16 =====
+l. Why Registry::execute() output must become ContentBlock::ToolResult. Why memory uses a pending result from the previous turn instead of synchronous retrieval every turn.","breadcrumbs"
+===== 17 =====
+is is not a one-API-key CLI. OAuth, account switching, headless login, callback URLs, and pending login state are all practical product problems for coding agents. If your previous demos 
+===== 18 =====
+-running local tool: users switch accounts, switch providers, log in over SSH, and resume pending login flows. Prompts do not solve those problems.","breadcrumbs":"s05 - Provider, Auth, S
+===== 19 =====
+the agent is doing, what changed, where it is stuck, and how much context or money it is spending. JCode invests heavily in TUI for this reason. A UI module belongs to the harness if it c
+===== 20 =====
+e } => { app.pause_streaming_tps(false); remote.handle_tool_start(&id, &name); app.commit_pending_streaming_assistant_message(); app.status = ProcessingStatus::RunningTool(name.clone()); 
+===== 21 =====
+\n} This is the hard boundary: the TUI is not passively consuming text. ToolStart commits pending assistant text, pauses TPS, updates status, and records the streaming tool call. ToolExec
+===== 22 =====
+gent 鐙珛浜у搧鎴栨彃浠?memory JCode 鐨勯暱鏈熷彫鍥炵郴缁燂紝鐢?sidecar 闈為樆濉炴绱㈠苟鍦ㄤ笅涓€杞敞鍏?鎵嬪姩绗旇鎴栨櫘閫?RAG demo pending memory memory sidecar 宸茬粡绠楀ソ銆佺瓑寰呬富 agent 涓嬩竴杞彇璧扮殑 prompt 褰撳墠杞珛鍗崇敓鏁堢殑涓婁笅鏂?swarm server 缁
+===== 23 =====
+work\\"] Relevance[\\"relevance<br/>context\\"] Retrieve[\\"retrieval<br/>maintenance\\"] Pending[\\"pending<br/>memory prompt\\"] end Sidecar --> Relevance Relevance --> Retrieve Retriev
+===== 24 =====
+submits context to a sidecar after a turn, the sidecar retrieves, maintains, and builds a pending prompt in the background, and the next turn injects that result into the main context. Th
+===== 25 =====
+ocess_context() turns messages into retrieval material, then stores relevant results as a pending prompt: // src/memory_agent.rs, excerpt\\nasync fn process_context( &mut self, session_id
+===== 26 =====
+(prompt) = memory::format_relevant_prompt(&relevant, MAX_MEMORIES_PER_TURN) { memory::set_pending_memory_with_ids_and_display( session_id, prompt, count, ids, display_prompt, ); }\\n} Tha
+===== 27 =====
+ on the next turn\\": the sidecar does not mutate the current provider request. It writes pending memory for the main agent to pick up later. Prompt assembly is also split. JCode separate
+===== 28 =====
+cade Store-->>Sidecar: relevant memories Sidecar->>Sidecar: build prompt Sidecar-->>Next: pending prompt This state flow explains why memory is not ordinary RAG. The main turn only submit
+===== 29 =====
+ieval and prompt assembly. The current turn does not wait, and the next turn consumes the pending prompt.","breadcrumbs":"s07 - Memory 禄 State Flow","id":"225","title":"State Flow"},"226"
+===== 30 =====
+ keeps four actions: bounded queue, non-blocking submit, background worker, and next-turn pending prompt. Real JCode adds embeddings, graph, cascade retrieval, prompt budget, and display 
+===== 31 =====
+ assistance; it is noise. The module relationship is straightforward: directives supplies pending work, manager owns runtime state, runner starts one ambient cycle, scheduler decides the 
+===== 32 =====
+od prompt;\\npub mod runner;\\npub mod scheduler; pub use directives::{add_directive, has_pending_directives, take_pending_directives};\\npub use manager::AmbientManager;\\npub use persis
+===== 33 =====
+ady_direct_items(); let should_run = ambient_allowed && (mgr.should_run() || ambient::has_pending_directives()); (should_run, ready_direct_items) } Err(_) => (false, Vec::new()), }; self.
+===== 34 =====
+(hash.clone()); manifest.canary_status = Some(build::CanaryStatus::Testing); manifest.set_pending_activation(build::PendingActivation { session_id: session_id.to_string(), new_version: ha
+===== 35 =====
+d_id.to_string(), session_id: session_id.to_string(), role, status: ReloadRecoveryStatus::Pending, directive, reason: reason.into(), created_at: chrono::Utc::now().to_rfc3339(), delivered
+===== 36 =====
+Session->>Build: request build / test Build-->>Session: usable binary Session->>Manifest: pending activation Session->>Server: reload signal Server-->>Session: handoff / recovery Both lin
+===== 37 =====
+ion keeps only the state boundary: enter a canary session, build before reload, and leave pending activation plus recovery context before restart. Self-dev lets JCode modify itself. Be co
+===== 38 =====
+or server? Should the current turn do it synchronously, or should the next turn consume a pending result? Does tool output return directly, or pass through truncation and content-block co
+===== 39 =====
+":"tool definition 鍜?tool execution"},"27":{"body":"memory sidecar 涓嶉樆濉炲綋鍓?turn銆傚畠鎶婄粨鏋滃啓鍒?pending memory锛屼富 agent 涓嬩竴杞啀娉ㄥ叆銆傝繖涓€杞欢杩熸槸鏈夋剰璁捐锛屼笉鏄紡鎺変簡鍚屾妫€绱€?,"breadcrumbs":"鏈琛?禄 memory
+===== 40 =====
+寰勫垎涓夋銆傜涓€娈垫槸璇锋眰鍓嶅噯澶囷細淇缂哄け鐨?tool result銆佹暣鐞?provider messages銆佺敓鎴愬伐鍏峰畾涔夈€佸彇涓婁竴杞?memory pending result銆佹瀯閫?split prompt銆侸Code 涓嶆槸鎶婅亰澶╄褰曞師鏍蜂涪缁欐ā鍨嬨€?绗簩娈垫槸 provider stream锛氭ā鍨嬫祦寮忚緭鍑烘枃鏈紝
+===== 41 =====
+nt) = self.messages_for_provider(); let tools = self.tool_definitions().await; let memory_pending = self.build_memory_prompt_nonblocking_shared(messages.clone(), None); let split_prompt =
+===== 42 =====
+?ToolCall銆?Registry::execute() 鐨勭粨鏋滀负浠€涔堣杞垚 ContentBlock::ToolResult銆?memory 涓轰粈涔堢敤涓婁竴杞?pending result锛岃€屼笉鏄瘡杞悓姝ユ绱€?,"breadcrumbs":"s03 - Agent Loop 禄 璇诲畬鍚庢鏌ヤ竴涓?,"id":"62","title":
+===== 43 =====
+EY 鐨?demo锛岃繖閮ㄥ垎浼氭樉寰楀暟鍡︺€備絾 JCode 闈㈠悜鐨勬槸闀挎湡鏈湴宸ュ叿锛岀敤鎴蜂細鎹㈣处鍙枫€佹崲 provider銆佸湪 SSH 鐜鐧诲綍銆佹仮澶?pending login銆傝繖浜涢兘涓嶆槸 prompt 鑳借В鍐崇殑闂銆?,"breadcrumbs":"s05 - Provider銆丄uth銆丼ession 禄 Auth 涓嶆槸灏忛
+===== 44 =====
+e } => { app.pause_streaming_tps(false); remote.handle_tool_start(&id, &name); app.commit_pending_streaming_assistant_message(); app.status = ProcessingStatus::RunningTool(name.clone()); 
+===== 45 =====
+)) }) .collect(); false } _ => false, }\\n} 杩欐浠ｇ爜鑳界湅鍑猴細TUI 涓嶆槸琚姩娑堣垂鏂囨湰娴併€俆oolStart 浼氭彁浜?pending assistant text銆佹殏鍋?TPS銆佹洿鏂扮姸鎬佸苟璁板綍姝ｅ湪娴佸紡鍑虹幇鐨勫伐鍏凤紱ToolExec 浼氭妸绱Н鐨?JSON input 鍙樻垚 ToolCall
+===== 46 =====
+work\\"] Relevance[\\"relevance<br/>context\\"] Retrieve[\\"retrieval<br/>maintenance\\"] Pending[\\"pending<br/>memory prompt\\"] end Sidecar --> Relevance Relevance --> Retrieve Retriev

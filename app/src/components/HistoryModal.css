@@ -1,4 +1,4 @@
-.log-overlay {
+.history-overlay {
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -8,8 +8,8 @@
   justify-content: center;
 }
 
-.log-panel {
-  width: 560px;
+.history-panel {
+  width: 640px;
   max-width: calc(100vw - 48px);
   max-height: 70vh;
   background: var(--bg);
@@ -22,20 +22,20 @@
   flex-direction: column;
 }
 
-.log-header {
+.history-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
 }
 
-.log-title {
+.history-title {
   margin: 0;
   font-size: 15px;
   color: var(--text-h);
 }
 
-.log-refresh {
+.history-refresh {
   height: 26px;
   padding: 0 12px;
   border: 1px solid var(--border);
@@ -47,31 +47,29 @@
   transition: background-color 0.2s;
 }
 
-.log-refresh:hover {
+.history-refresh:hover {
   background-color: var(--accent-bg);
 }
 
-.log-refresh:disabled {
+.history-refresh:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-.log-path {
+.history-count {
   font-size: 11px;
-  color: var(--text);
-  opacity: 0.7;
-  margin-bottom: 10px;
-  word-break: break-all;
-  user-select: text;
+  color: var(--accent);
+  margin-bottom: 4px;
+  word-break: break-word;
 }
 
-.log-error {
+.history-error {
   font-size: 12px;
   color: #e81123;
   margin-bottom: 10px;
 }
 
-.log-empty {
+.history-empty {
   font-size: 13px;
   color: var(--text);
   opacity: 0.7;
@@ -79,7 +77,7 @@
   text-align: center;
 }
 
-.log-list {
+.history-list {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -87,34 +85,24 @@
   flex-shrink: 1;
 }
 
-.log-entry {
+.history-entry {
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--code-bg);
   padding: 6px 10px;
 }
 
-.log-entry-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.log-entry-time {
+.history-entry-time {
   font-size: 11px;
-  color: var(--text);
-  opacity: 0.7;
-  font-family: var(--mono);
-}
-
-.log-entry-id {
-  font-size: 11px;
+  line-height: 1.4;
   color: var(--accent);
-  opacity: 0.85;
+  opacity: 0.9;
+  margin-bottom: 2px;
+  font-family: var(--mono);
+  user-select: text;
 }
 
-.log-entry-content {
+.history-content {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;

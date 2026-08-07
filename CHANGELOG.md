@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Removed
+- 移除旧的逐键输入日志与全局快捷键配置，改用 OopsTerminal 输入层按整行记录历史命令。
+
+### Added
+- 标题栏恢复"历史记录"入口,展示命令与时间;OopsTerminal 监听终端输入并在回车时增量追加 `%APPDATA%\OopsTerminal\history-with-time.jsonl`,不依赖 PowerShell profile 的 `AddToHistoryHandler`。
+- 历史弹窗在 JSONL 不存在时回退读取 PSReadLine 的 `ConsoleHost_history.txt`,继续展示旧历史。
+
 ### Fixed
 - 修复自定义字体加载超时:路径经过不受信任的 junction(如 Scoop 的 `current` 目录)时,后端会先解析链接到真实路径再加载,不再回退默认字体。
 - 保存字体路径时在设置界面即时校验(解析链接、检查文件存在与格式),无效路径直接给出中文错误提示,不再静默存坏路径。

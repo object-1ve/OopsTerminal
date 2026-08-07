@@ -2,14 +2,14 @@ import { useCallback, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { TitleBar } from './components/TitleBar'
 import { SettingsModal } from './components/SettingsModal'
-import { LogModal } from './components/LogModal'
+import { HistoryModal } from './components/HistoryModal'
 import { TabBar, type Tab } from './components/TabBar'
 import { TerminalView } from './components/TerminalView'
 import './App.css'
 
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [logOpen, setLogOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const keySeq = useRef(1)
   const [tabs, setTabs] = useState<Tab[]>([{ key: 1, sessionId: null }])
@@ -18,7 +18,9 @@ function App() {
   const addTab = useCallback((cwd?: string) => {
     keySeq.current += 1
     const key = keySeq.current
-    setTabs((t) => [...t, { key, sessionId: null, startCwd: cwd }])
+    // 防御: 事件对象等非字符串值绝不存入 tab, 避免污染 create_terminal 参数
+    const cleanCwd = typeof cwd === "string" ? cwd : undefined
+    setTabs((t) => [...t, { key, sessionId: null, startCwd: cleanCwd }])
     setActiveKey(key)
   }, [])
 
@@ -60,13 +62,16 @@ function App() {
 
   return (
     <div className="app-shell">
-      <TitleBar onOpenSettings={() => setSettingsOpen(true)} onOpenLog={() => setLogOpen(true)} />
+      <TitleBar
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenHistory={() => setHistoryOpen(true)}
+      />
       <TabBar
         tabs={tabs}
         activeKey={activeKey}
         onSelect={setActiveKey}
         onClose={closeTab}
-        onAdd={addTab}
+        onAdd={() => addTab()}
         onDuplicate={duplicateTab}
       />
       <div className="terminal-area">
@@ -85,7 +90,7 @@ function App() {
         {tabs.length === 0 && <div className="terminal-empty">点击 + 新建终端</div>}
       </div>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <LogModal open={logOpen} onClose={() => setLogOpen(false)} />
+      <HistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} />
     </div>
   )
 }

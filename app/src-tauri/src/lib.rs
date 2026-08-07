@@ -1,4 +1,5 @@
 mod db;
+mod history;
 mod shortcuts;
 mod terminal;
 mod ui;
@@ -17,7 +18,6 @@ pub fn run() {
             // 已有一个实例在运行时,新实例直接退出,并唤起已有实例的主窗口
             shortcuts::show_main_window(app);
         }))
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // 初始化数据库路径
@@ -36,10 +36,8 @@ pub fn run() {
                 let _ = window.center();
             }
 
-            // 加载设置并注册全局快捷键
+            // 加载设置
             let settings = load_settings(&conn).unwrap_or(db::Settings {
-                toggle_window_shortcut: None,
-                quit_shortcut: None,
                 default_path: None,
                 show_tray_icon: true,
                 show_taskbar_icon: false,
@@ -50,7 +48,6 @@ pub fn run() {
             app.manage(ui::TrayState(Mutex::new(None)));
 
             let app_handle = app.handle();
-            shortcuts::init_shortcuts(app_handle, &settings);
             app.manage(SettingsState(Mutex::new(settings)));
             app.manage(terminal::TerminalManager::default());
 
@@ -81,7 +78,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             shortcuts::get_settings,
-            shortcuts::set_shortcut,
             shortcuts::set_default_path,
             shortcuts::set_terminal_font_path,
             shortcuts::resolve_terminal_font_path,
@@ -91,7 +87,8 @@ pub fn run() {
             terminal::resize_terminal,
             terminal::kill_terminal,
             terminal::get_terminal_cwd,
-            terminal::read_input_log,
+            history::read_oops_history,
+            history::record_oops_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
