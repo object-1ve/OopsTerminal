@@ -133,8 +133,12 @@ export const TerminalView = ({
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sessionIdRef = useRef<number | null>(null);
+  const activeRef = useRef(active);
   const onSessionIdRef = useRef(onSessionId);
   const startCwdRef = useRef(startCwd);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
   useEffect(() => {
     onSessionIdRef.current = onSessionId;
   }, [onSessionId]);
@@ -212,7 +216,7 @@ export const TerminalView = ({
 
     let disposed = false;
     let inputBuffer = "";
-    const sessionIdRef: { current: number | null } = { current: null };
+    const pendingOutputs: TerminalOutput[] = [];
     const unlistenFns: (() => void)[] = [];
 
     const doResize = () => {
@@ -231,7 +235,11 @@ export const TerminalView = ({
     (async () => {
       try {
         const unOut = await listen<TerminalOutput>("terminal-output", (e) => {
-          if (e.payload.id === sessionIdRef.current) term.write(e.payload.data);
+          if (e.payload.id === sessionIdRef.current) {
+            term.write(e.payload.data);
+          } else if (sessionIdRef.current === null) {
+            pendingOutputs.push(e.payload);
+          }
         });
         if (disposed) {
           unOut();
@@ -276,6 +284,12 @@ export const TerminalView = ({
         }
         sessionIdRef.current = id;
         onSessionIdRef.current(id);
+        for (const output of pendingOutputs) {
+          if (output.id === id) term.write(output.data);
+        }
+        pendingOutputs.length = 0;
+        if (term.rows > 0) term.refresh(0, term.rows - 1);
+        if (activeRef.current) term.focus();
       } catch (e) {
         term.write(`\r\n\x1b[91m[启动终端失败] ${String(e)}\x1b[0m`);
       }
@@ -300,6 +314,7 @@ export const TerminalView = ({
     const ro = new ResizeObserver(() => {
       try {
         fit.fit();
+        if (term.rows > 0) term.refresh(0, term.rows - 1);
         doResize();
       } catch {
         /* 容器隐藏时尺寸为 0 */
@@ -341,8 +356,12 @@ export const TerminalView = ({
     const raf = requestAnimationFrame(() => {
       try {
         fitRef.current?.fit();
-        const sid = sessionIdRef.current;
         const term = termRef.current;
+        if (term && term.rows > 0) {
+          term.refresh(0, term.rows - 1);
+          term.focus();
+        }
+        const sid = sessionIdRef.current;
         if (sid != null && term && term.cols > 0 && term.rows > 0) {
           invoke("resize_terminal", { id: sid, cols: term.cols, rows: term.rows }).catch(
             () => {},
