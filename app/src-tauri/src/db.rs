@@ -3,8 +3,6 @@ use std::path::PathBuf;
 
 #[derive(Clone, serde::Serialize)]
 pub struct Settings {
-    pub toggle_window_shortcut: Option<String>,
-    pub quit_shortcut: Option<String>,
     pub default_path: Option<String>,
     pub show_tray_icon: bool,
     pub show_taskbar_icon: bool,
@@ -29,8 +27,6 @@ pub fn init_db(app_dir: PathBuf) -> Result<Connection> {
 
 pub fn load_settings(conn: &Connection) -> Result<Settings> {
     Ok(Settings {
-        toggle_window_shortcut: load_setting(conn, "toggle_window_shortcut")?,
-        quit_shortcut: load_setting(conn, "quit_shortcut")?,
         default_path: load_setting(conn, "default_path")?,
         show_tray_icon: load_bool(conn, "show_tray_icon", true)?,
         show_taskbar_icon: load_bool(conn, "show_taskbar_icon", false)?,
@@ -84,20 +80,15 @@ mod tests {
         )
         .unwrap();
 
-        save_setting(&conn, "toggle_window_shortcut", Some("Ctrl+Shift+K")).unwrap();
-        save_setting(&conn, "quit_shortcut", None).unwrap();
+        save_setting(&conn, "default_path", Some("C:\\proj")).unwrap();
 
         let loaded = load_settings(&conn).unwrap();
-        assert_eq!(
-            loaded.toggle_window_shortcut.as_deref(),
-            Some("Ctrl+Shift+K")
-        );
-        assert_eq!(loaded.quit_shortcut, None);
+        assert_eq!(loaded.default_path.as_deref(), Some("C:\\proj"));
 
         // Clearing an existing key removes the row.
-        save_setting(&conn, "toggle_window_shortcut", None).unwrap();
+        save_setting(&conn, "default_path", None).unwrap();
         let loaded = load_settings(&conn).unwrap();
-        assert_eq!(loaded.toggle_window_shortcut, None);
+        assert_eq!(loaded.default_path, None);
     }
 }
 

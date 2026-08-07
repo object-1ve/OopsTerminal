@@ -2,9 +2,6 @@ use crate::db;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_global_shortcut::{
-    GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState,
-};
 use tauri::Emitter;
 
 /// 支持的字体文件扩展名(小写)。
@@ -118,7 +115,7 @@ fn resolve_font_path(raw: &str) -> Result<PathBuf, String> {
 /// Runtime view of user settings, kept in sync with the database.
 pub struct SettingsState(pub Mutex<db::Settings>);
 
-/// 显示主窗口并聚焦。单实例回调与快捷键的显示分支共用。
+/// 显示主窗口并聚焦。单实例回调与托盘菜单共用。
 pub fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         #[cfg(target_os = "windows")]
@@ -210,98 +207,9 @@ pub fn toggle_main_window(app: &AppHandle) {
     }
 }
 
-fn shortcut_handler(
-    kind: &'static str,
-) -> impl Fn(&AppHandle, &Shortcut, ShortcutEvent) + Send + Sync + 'static {
-    move |app, _shortcut, event| {
-        if event.state() != ShortcutState::Pressed {
-            return;
-        }
-        match kind {
-            "toggle" => toggle_main_window(app),
-            "quit" => app.exit(0),
-            _ => {}
-        }
-    }
-}
-
-fn register_shortcut(app: &AppHandle, kind: &'static str, accel: &str) -> Result<(), String> {
-    let shortcut: Shortcut = accel
-        .parse()
-        .map_err(|e| format!("无效的快捷键格式: {e}"))?;
-    app.global_shortcut()
-        .on_shortcut(shortcut, shortcut_handler(kind))
-        .map_err(|e| format!("快捷键注册失败(可能已被其他程序占用): {e}"))
-}
-
-fn unregister_shortcut(app: &AppHandle, accel: &str) {
-    let _ = app.global_shortcut().unregister(accel);
-}
-
-/// Load persisted settings, register every configured shortcut.
-pub fn init_shortcuts(app: &AppHandle, settings: &db::Settings) {
-    if let Some(accel) = &settings.toggle_window_shortcut {
-        if let Err(e) = register_shortcut(app, "toggle", accel) {
-            log::warn!("toggle shortcut: {e}");
-        }
-    }
-    if let Some(accel) = &settings.quit_shortcut {
-        if let Err(e) = register_shortcut(app, "quit", accel) {
-            log::warn!("quit shortcut: {e}");
-        }
-    }
-}
-
 #[tauri::command]
 pub fn get_settings(state: tauri::State<'_, SettingsState>) -> db::Settings {
     state.0.lock().unwrap().clone()
-}
-
-#[tauri::command]
-pub fn set_shortcut(
-    app: AppHandle,
-    state: tauri::State<'_, SettingsState>,
-    kind: String,
-    accel: Option<String>,
-) -> Result<db::Settings, String> {
-    let db_key = match kind.as_str() {
-        "toggle" => "toggle_window_shortcut",
-        "quit" => "quit_shortcut",
-        _ => return Err("未知的设置项".into()),
-    };
-    let action_kind: &'static str = match kind.as_str() {
-        "toggle" => "toggle",
-        _ => "quit",
-    };
-
-    let accel = accel.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let mut guard = state.0.lock().unwrap();
-    let old = match db_key {
-        "toggle_window_shortcut" => guard.toggle_window_shortcut.clone(),
-        _ => guard.quit_shortcut.clone(),
-    };
-
-    if old != accel {
-        // Register the new shortcut first so a conflict leaves the old one intact.
-        if let Some(new) = &accel {
-            register_shortcut(&app, action_kind, new)?;
-        }
-        if let Some(old_accel) = &old {
-            unregister_shortcut(&app, old_accel);
-        }
-
-        let db_state = app.state::<crate::DbState>();
-        let conn = db_state.0.lock().unwrap();
-        db::save_setting(&conn, db_key, accel.as_deref())
-            .map_err(|e| format!("保存设置失败: {e}"))?;
-
-        match db_key {
-            "toggle_window_shortcut" => guard.toggle_window_shortcut = accel,
-            _ => guard.quit_shortcut = accel,
-        }
-    }
-
-    Ok(guard.clone())
 }
 
 /// 保存终端默认启动路径。传 None 或空字符串表示使用用户主目录。
@@ -372,25 +280,6 @@ pub fn resolve_terminal_font_path(path: String) -> Result<String, String> {
 mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
-    use std::str::FromStr;
-    use tauri_plugin_global_shortcut::Shortcut;
-
-    #[test]
-    fn parses_frontend_accelerator_format() {
-        for accel in ["Ctrl+Shift+K", "Alt+1", "Super+F5", "Shift+F1", "Ctrl+Alt+Delete"] {
-            assert!(
-                Shortcut::from_str(accel).is_ok(),
-                "{accel} should parse"
-            );
-        }
-    }
-
-    #[test]
-    fn rejects_modifier_only_or_empty() {
-        assert!(Shortcut::from_str("").is_err());
-        assert!(Shortcut::from_str("Ctrl+Shift").is_err());
-        assert!(Shortcut::from_str("Ctrl").is_err());
-    }
 
     fn test_base_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
