@@ -6,6 +6,7 @@ type LogEntry = {
   time: string;
   id: number;
   content: string;
+  cwd?: string;
 };
 
 type InputLogData = {
@@ -13,7 +14,10 @@ type InputLogData = {
   entries: LogEntry[];
 };
 
-/** 把输入内容转成可读的单行文本:控制字符显示为可见记号。 */
+/** 把 ISO 时间转为 YYYY-MM-DD HH:MM:SS 显示格式。 */
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleString("sv-SE");
+}
 function renderContent(content: string): string {
   return Array.from(
     content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\t/g, "→    "),
@@ -21,7 +25,8 @@ function renderContent(content: string): string {
     .map((c) => {
       const code = c.charCodeAt(0);
       if (c === "\n") return "⏎\n";
-      if (code < 0x20 || code === 0x7f) return `�U+${code.toString(16).toUpperCase()}`;
+      if (code === 0x7f || code === 0x08) return "⌫";
+      if (code < 0x20) return `U+${code.toString(16).toUpperCase()}`;
       return c;
     })
     .join("");
@@ -78,7 +83,8 @@ export const LogModal = ({ open, onClose }: { open: boolean; onClose: () => void
           {data?.entries.map((entry, i) => (
             <div className="log-entry" key={`${entry.time}-${entry.id}-${i}`}>
               <div className="log-entry-meta">
-                <span className="log-entry-time">{entry.time}</span>
+                {entry.cwd && <span className="log-entry-cwd">{entry.cwd}</span>}
+                <span className="log-entry-time">{formatTime(entry.time)}</span>
                 <span className="log-entry-id">会话 {entry.id}</span>
               </div>
               <pre className="log-entry-content">{renderContent(entry.content)}</pre>

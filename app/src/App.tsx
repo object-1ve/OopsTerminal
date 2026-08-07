@@ -18,7 +18,9 @@ function App() {
   const addTab = useCallback((cwd?: string) => {
     keySeq.current += 1
     const key = keySeq.current
-    setTabs((t) => [...t, { key, sessionId: null, startCwd: cwd }])
+    // 防御: 事件对象等非字符串值绝不存入 tab, 避免污染 create_terminal 参数
+    const cleanCwd = typeof cwd === "string" ? cwd : undefined
+    setTabs((t) => [...t, { key, sessionId: null, startCwd: cleanCwd }])
     setActiveKey(key)
   }, [])
 
@@ -66,7 +68,7 @@ function App() {
         activeKey={activeKey}
         onSelect={setActiveKey}
         onClose={closeTab}
-        onAdd={addTab}
+        onAdd={() => addTab()}
         onDuplicate={duplicateTab}
       />
       <div className="terminal-area">

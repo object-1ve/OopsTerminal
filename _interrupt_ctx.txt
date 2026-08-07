@@ -1,0 +1,16 @@
+﻿===== 1 =====
+, collect a tool call, execute the tool, and write the tool result into the next turn. Compaction, memory, native tools, and soft interrupts are explained in their own lessons instead of being left as file names. There is no separate task area in this course. The impor
+===== 2 =====
+ing, HashMap<String, SharedContext>>>>, mcp_pool: Arc<OnceCell<Arc<SharedMcpPool>>>, shutdown_signals: Arc<RwLock<HashMap<String, InterruptSignal>>>,\\n} This is not a thin proxy. sessions, provider, swarm_state, and mcp_pool live in the server runtime, so long-running
+===== 3 =====
+r\\nclient_connections\\nswarm_state\\nshared_context\\nfile_touches\\nchannel_subscriptions\\nmcp_pool\\nshutdown_signals\\nsoft_interrupt_queues These fields show that the server is not just a message proxy. It is the center of sessions, coordination, tools, and UI e
+===== 4 =====
+Code\'s TUI is a runtime dashboard: server events are written into state before they become signals the user can use to continue, interrupt, or trust the agent. Understand why UI is part of the harness. Many agent projects only care whether the model can finish a task.
+===== 5 =====
+Without that, an agent modifying itself would easily lose the current task. The server also has reload recovery records. Sessions interrupted during reload are not expected to remember themselves: // src/server/reload_recovery.rs, excerpt\\npub(super) struct ReloadReco
+===== 6 =====
+鍒版甯歌矾寰勶細鍑嗗 messages 鍜?tools锛岃皟鐢?provider stream锛屾敹闆?tool call锛屾墽琛屽伐鍏凤紝鎶?tool result 鍐欏洖涓嬩竴杞€俢ompaction銆乵emory銆乶ative tool銆乻oft interrupt 浼氬湪鐩稿叧璇剧▼閲岃ˉ锛屼笉浼氬彧涓㈡枃浠跺悕銆?杩欎唤鏁欑▼涓嶅彟寮€棰樼洰鍖恒€傞渶瑕佷綘鐭ラ亾鐨勫垽鏂細鐩存帴鏀惧湪璇鹃噷锛涙簮鐮佽妭閫変笉鏄负浜嗗仛棰橈紝鑰屾槸涓轰簡璁╀綘鐪嬪埌鏌愪釜鍑芥暟鏃剁煡閬撳畠涓轰粈涔堟斁鍦ㄨ繖閲屻€?,"breadc
+===== 7 =====
+ing, HashMap<String, SharedContext>>>>, mcp_pool: Arc<OnceCell<Arc<SharedMcpPool>>>, shutdown_signals: Arc<RwLock<HashMap<String, InterruptSignal>>>,\\n} 杩欎笉鏄竴涓杽浠ｇ悊銆俿essions銆乸rovider銆乻warm_state銆乵cp_pool 閮藉湪 server runtime 閲岋紝闀挎湡浼氳瘽銆佸 client銆丮CP銆乻warm 閮戒緷璧栬繖涓父椹昏繘绋嬨
+===== 8 =====
+r\\nclient_connections\\nswarm_state\\nshared_context\\nfile_touches\\nchannel_subscriptions\\nmcp_pool\\nshutdown_signals\\nsoft_interrupt_queues 杩欎簺瀛楁璇存槑 JCode 鐨?server 涓嶅彧鏄€滆浆鍙戞秷鎭€濄€傚畠鏄細璇濄€佸崗浣溿€佸伐鍏枫€乁I 浜嬩欢鐨勪腑蹇冦€?,"breadcrumbs":"s02 - 鍚姩杩囩▼鍜屽父椹?Server 禄 ServerRu

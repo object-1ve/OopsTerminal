@@ -261,10 +261,12 @@ export const TerminalView = ({
         }
         const cols = term.cols || 80;
         const rows = term.rows || 24;
+        // 防御: startCwd 可能被历史状态污染成非字符串, 只传合法值
+        const cwdArg = typeof startCwdRef.current === "string" ? startCwdRef.current : null;
         const id = await invoke<number>("create_terminal", {
           cols,
           rows,
-          cwd: startCwdRef.current ?? null,
+          cwd: cwdArg,
         });
         if (disposed) {
           invoke("kill_terminal", { id }).catch(() => {});

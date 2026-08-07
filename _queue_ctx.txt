@@ -1,0 +1,46 @@
+﻿=====
+nding_directives};\\npub use manager::AmbientManager;\\npub use persistence::{AmbientLock, ScheduledQueue};\\npub use prompt::{ ResourceBudget, build_ambient_system_prompt, gather_recent_sessions, gather_m
+=====
+ ambient agent 涓嶆槸璺戝畬灏辨秷澶便€傚畠蹇呴』姹囨姤鏈疆鍋氫簡浠€涔堛€佹敼浜嗗灏?memory銆佹槸鍚﹀仛浜?compaction銆佷笅娆′粈涔堟椂鍊欓啋銆?schedule queue 璇存槑鈥滀笅娆″敜閱掆€濅笉鏄彛澶存壙璇猴紝鑰屾槸鎸佷箙鍖栭槦鍒楅噷鐨?item锛?// src/ambient/persistence.rs锛岃妭閫塡\npub struct Scheduled
+=====
+","title":"Ambient 鏍稿績浠ｇ爜鑺傞€?},"119":{"body":"ambient 璋冨害鍙互瀵圭収 mini/07_ambient_scheduler.py 銆傚畠淇濈暀 queue銆乸op_ready銆乺un cycle銆乪nd cycle銆乺eschedule 杩欐潯绾裤€?鐪熷疄 JCode 澶氫簡 active session pause銆乸ermission reque
+=====
+t-info銆乻ocket-help 浼氭鏌ュ綋鍓?session 鏄惁 self-dev锛岃繖灏辨槸椋庨櫓杈圭晫銆俵aunch 璐熻矗浠庢櫘閫氫細璇濆垏鍒?self-dev 浼氳瘽锛宐uild queue 璐熻矗璇锋眰鍘婚噸銆侀攣鍜屽悗鍙扮姸鎬侊紝reload 璐熻矗鏂?binary 鎺ョ鏃?server 骞舵仮澶嶄細璇濄€?Prompt 涓嶆槸 self-dev 鐨勬牳蹇冦€傚畠鍙槸鎶婅鍒欏憡
+=====
+"id":"121","title":"Self-Dev 鏍稿績浠ｇ爜鑺傞€?},"122":{"body":"Ambient 鐨勭姸鎬佹祦锛?sequenceDiagram participant Queue as ScheduledQueue participant Runner as ambient runner participant Agent as ambient agent participa
+=====
+Queue-->>Runner: pop ready Runner->>Agent: start cycle Agent->>Tool: summary / budget / next Tool->>Queue: schedule next Self-dev 鐨勭姸鎬佹祦锛?sequenceDiagram participant Session as self-dev session participant
+=====
+vation Session->>Server: reload signal Server-->>Session: handoff / recovery 涓よ竟閮界粫涓嶅紑鎭㈠锛歛mbient 鐢?queue 鎭㈠涓嬩竴娆″敜閱掞紝self-dev 鐢?manifest 鍜?reload context 鎭㈠姝ｅ湪鍋氱殑淇敼銆?,"breadcrumbs":"s09 - Ambient 鍜?Self
+=====
+wned swarm state tracks members, channels, and progress s08 07_ambient_scheduler.py ambient work is queued, popped, ended, and rescheduled s09 08_selfdev_reload_gate.py self-dev reload is gated by session 
+=====
+hared_context\\nfile_touches\\nchannel_subscriptions\\nmcp_pool\\nshutdown_signals\\nsoft_interrupt_queues These fields show that the server is not just a message proxy. It is the center of sessions, coord
+=====
+"},"226":{"body":"Memory sidecar maps to mini/04_memory_sidecar.py . It keeps four actions: bounded queue, non-blocking submit, background worker, and next-turn pending prompt. Real JCode adds embeddings, 
+=====
+t needs startup conditions, resource budget, safety boundaries, runner, scheduler, and a persistent queue. Without those, a background agent is not assistance; it is noise. The module relationship is strai
+=====
+time state, runner starts one ambient cycle, scheduler decides the next wake-up, persistence stores queues and locks, and tool/ambient lets the background agent end a cycle, schedule future work, or reques
+=====
+ode has three things to show: ambient is not a single tool file; ready items come from a persistent queue; the background agent must report the cycle result through end_ambient_cycle.","breadcrumbs":"s09 -
+=====
+nding_directives};\\npub use manager::AmbientManager;\\npub use persistence::{AmbientLock, ScheduledQueue};\\npub use prompt::{ ResourceBudget, build_ambient_system_prompt, gather_recent_sessions, gather_m
+=====
+ppened, how many memories changed, whether compaction happened, and when to wake next. The schedule queue shows that \\"wake next\\" is a persisted item, not just a promise in text: // src/ambient/persiste
+=====
+, excerpt\\npub struct ScheduledQueue { items: Vec<ScheduledItem>, path: PathBuf,\\n} impl ScheduledQueue { pub fn push(&mut self, item: ScheduledItem) { self.items.push(item); let _ = self.save(); } pub f
+=====
+runs first, and equal priority falls back to scheduled time. The background agent is constrained by queue and scheduler, not an infinite loop. The runner connects queue, lock, and agent cycle: // src/ambie
+=====
+ce Excerpts"},"242":{"body":"Ambient scheduling maps to mini/07_ambient_scheduler.py . It keeps the queue, pop_ready, run cycle, end cycle, and reschedule path. Real JCode adds active-session pause, permis
+=====
+ session is self-dev; that is the risk boundary. Launch moves a normal session into self-dev, build queue handles dedupe, locks, and background state, and reload lets a new binary take over the old server 
+=====
+le":"Self-Dev Core Source Excerpts"},"245":{"body":"Ambient state flow: sequenceDiagram participant Queue as ScheduledQueue participant Runner as ambient runner participant Agent as ambient agent participa
+=====
+Queue-->>Runner: pop ready Runner->>Agent: start cycle Agent->>Tool: summary / budget / next Tool->>Queue: schedule next Self-dev state flow: sequenceDiagram participant Session as self-dev session partici
+=====
+very Both lines point to the same rule: background capabilities must be recoverable. Ambient uses a queue to recover the next wake-up. Self-dev uses manifest and reload context to recover the active modifi
+=====
+hared_context\\nfile_touches\\nchannel_subscriptions\\nmcp_pool\\nshutdown_signals\\nsoft_interrupt_queues 杩欎簺瀛楁璇存槑 JCode 鐨?server 涓嶅彧鏄€滆浆鍙戞秷鎭€濄€傚畠鏄細璇濄€佸崗浣溿€佸伐鍏枫€乁I 浜嬩欢鐨勪腑蹇冦€?,"breadcrumbs":"s02 - 鍚姩杩

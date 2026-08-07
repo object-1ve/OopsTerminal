@@ -21,7 +21,6 @@ struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
-    /// 当前工作目录,随 PowerShell 提示符渲染实时更新。
     cwd: std::path::PathBuf,
 }
 
@@ -179,6 +178,9 @@ fn parse_prompt_line(line: &str) -> Option<String> {
 ///
 /// 先去掉 ANSI 序列(PSReadLine 可能给路径上色),再按行反向匹配
 /// `PS <路径>> `。找不到(自定义提示符等)返回 None,调用方回退默认目录。
+///
+/// 运行时已被 `OutputTracker` 逐行解析取代,保留用于单元测试覆盖提示符解析。
+#[cfg_attr(not(test), allow(dead_code))]
 fn parse_prompt_cwd(text: &str) -> Option<String> {
     let stripped = strip_ansi(text);
     for line in stripped.lines().rev() {
@@ -254,13 +256,39 @@ pub fn create_terminal(
     };
 
     // 读取线程:持续把 shell 输出转发给前端,进程退出后清理会话
+    // 输入记录在此实现:解析输出回显中的 `PS <路径>> <命令>` 行,
+    // 识别用户已提交的命令并写入日志(完全不监听键盘输入)。
     let app_handle = app.clone();
     let exit_app = app.clone();
+    let log_path = state.log_path.lock().unwrap().clone();
     std::thread::spawn(move || {
         let mut pending: Vec<u8> = Vec::new();
         let mut buf = [0u8; 8192];
-        // 最近一段已解码输出,用于识别 PowerShell 提示符并同步目录
-        let mut tail = String::new();
+        let mut tracker = OutputTracker::new();
+        // 处理一段已解码输出:识别命令写日志、同步 cwd、转发给前端
+        let handle_output = |decoded: &str, tracker: &mut OutputTracker| {
+            for (cmd_cwd, cmd) in tracker.push(decoded) {
+                if let Some(lp) = &log_path {
+                    if let Err(e) = append_input_log(lp, id, &cmd, &cmd_cwd) {
+                        log::warn!("写入输入日志失败 ({}): {e}", lp.display());
+                    }
+                }
+            }
+            if let Some(cwd) = tracker.cwd.clone() {
+                if let Some(mgr) = exit_app.try_state::<TerminalManager>() {
+                    if let Some(session) = mgr.inner.lock().unwrap().sessions.get_mut(&id) {
+                        session.cwd = std::path::PathBuf::from(&cwd);
+                    }
+                }
+            }
+            let _ = app_handle.emit(
+                "terminal-output",
+                TerminalOutput {
+                    id,
+                    data: decoded.to_string(),
+                },
+            );
+        };
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break, // EOF: 进程已退出
@@ -269,28 +297,14 @@ pub fn create_terminal(
                     // 只发送完整的 UTF-8 序列,避免跨包截断产生乱码
                     match std::str::from_utf8(&pending) {
                         Ok(s) => {
-                            update_cwd_from_output(&exit_app, id, s, &mut tail);
-                            let _ = app_handle.emit(
-                                "terminal-output",
-                                TerminalOutput {
-                                    id,
-                                    data: s.to_string(),
-                                },
-                            );
+                            handle_output(s, &mut tracker);
                             pending.clear();
                         }
                         Err(e) => {
                             let valid = e.valid_up_to();
                             if valid > 0 {
                                 let s = std::str::from_utf8(&pending[..valid]).unwrap();
-                                update_cwd_from_output(&exit_app, id, s, &mut tail);
-                                let _ = app_handle.emit(
-                                    "terminal-output",
-                                    TerminalOutput {
-                                        id,
-                                        data: s.to_string(),
-                                    },
-                                );
+                                handle_output(s, &mut tracker);
                                 pending.drain(..valid);
                             }
                             // error_len() == None 表示不完整的多字节序列,等下一包
@@ -309,31 +323,87 @@ pub fn create_terminal(
     Ok(id)
 }
 
-/// 把一段已解码的终端输出并入 tail,从中识别 PowerShell 提示符里的目录。
-/// 返回最近一次识别到的目录;未识别到返回 None。
+/// 从一行提示符文本提取用户已提交的命令。
 ///
-/// 单独拆出便于单元测试;真正的状态更新由调用方完成。
-fn parse_tracked_cwd(decoded: &str, tail: &mut String) -> Option<String> {
-    const MAX_TAIL: usize = 4096;
-    tail.push_str(decoded);
-    if tail.len() > MAX_TAIL {
-        tail.drain(..tail.len() - MAX_TAIL);
-    }
-    if !tail.contains("PS ") {
+/// 匹配 PSReadLine 的回显格式 `PS <路径>> <命令>`。
+/// 命令为空或非提示符行返回 None。返回 (命令执行时的目录, 命令)。
+fn parse_prompt_command(line: &str) -> Option<(String, String)> {
+    let body = line.strip_prefix("PS ")?.trim_end();
+    // 第一个 `>` 是提示符箭头;命令里后续的 `>`(如重定向)不受影响
+    let arrow = body.find('>')?;
+    let path = body[..arrow].trim_end();
+    let cmd = body[arrow + 1..].trim();
+    if !looks_like_path(path) || cmd.is_empty() {
         return None;
     }
-    parse_prompt_cwd(tail)
+    Some((path.to_string(), cmd.to_string()))
 }
 
-/// 把输出并入 tail 并同步会话的 cwd。识别失败不影响输出转发。
-fn update_cwd_from_output(app: &AppHandle, id: u32, decoded: &str, tail: &mut String) {
-    let Some(cwd) = parse_tracked_cwd(decoded, tail) else {
-        return;
-    };
-    if let Some(mgr) = app.try_state::<TerminalManager>() {
-        if let Some(session) = mgr.inner.lock().unwrap().sessions.get_mut(&id) {
-            session.cwd = std::path::PathBuf::from(&cwd);
+/// 输出跟踪器:按行消费 shell 输出,识别提示符目录与用户提交的命令。
+///
+/// 输入记录完全在输出侧实现,不监听键盘:PowerShell(PSReadLine)在用户
+/// 按下回车后会输出 `PS <路径>> <命令>` 回显行,解析该行即得到已提交的
+/// 最终命令文本 —— 退格、方向键、IME 组合等编辑过程天然不可见。
+struct OutputTracker {
+    /// 已解码输出累积,跨块拼出完整行。
+    tail: String,
+    /// tail 中已消费到的字节位置(逐行推进,避免重复处理)。
+    scanned: usize,
+    /// 最近一次提示符解析出的目录(含空命令的新提示符)。
+    cwd: Option<String>,
+    /// 当前正在累积的命令(多行输入由 `>> ` 续行扩展)。
+    pending: Option<PendingCmd>,
+}
+
+/// 一条正在累积的待提交命令,附带其执行时的目录。
+struct PendingCmd {
+    path: String,
+    cmd: String,
+}
+
+impl OutputTracker {
+    fn new() -> Self {
+        OutputTracker {
+            tail: String::new(),
+            scanned: 0,
+            cwd: None,
+            pending: None,
         }
+    }
+
+    /// 并入一段输出,返回新识别出的 (目录, 命令) 列表。
+    fn push(&mut self, decoded: &str) -> Vec<(String, String)> {
+        const MAX_TAIL: usize = 8192;
+        self.tail.push_str(decoded);
+        let mut recorded = Vec::new();
+        loop {
+            let rest = &self.tail[self.scanned..];
+            let Some(i) = rest.find('\n') else { break };
+            let line = &rest[..i];
+            self.scanned += i + 1;
+            let stripped = strip_ansi(line).trim_end_matches('\r').to_string();
+            // 目录:任何 `PS <路径>> ` 提示符行(含空命令)都刷新目录
+            if let Some(path) = parse_prompt_line(&stripped) {
+                self.cwd = Some(path);
+            }
+            // 命令:回显行开始新命令,`>> ` 续行扩展,其他行结束当前命令
+            if let Some((path, cmd)) = parse_prompt_command(&stripped) {
+                self.pending = Some(PendingCmd { path, cmd });
+            } else if stripped.starts_with(">> ") {
+                if let Some(p) = self.pending.as_mut() {
+                    p.cmd.push('\n');
+                    p.cmd.push_str(&stripped[3..]);
+                }
+            } else if let Some(p) = self.pending.take() {
+                recorded.push((p.path, p.cmd));
+            }
+        }
+        if self.tail.len() > MAX_TAIL {
+            let cut = self.tail.len() - MAX_TAIL;
+            self.tail.drain(..cut);
+            self.scanned = self.scanned.saturating_sub(cut);
+        }
+        recorded
     }
 }
 
@@ -349,9 +419,7 @@ pub fn get_terminal_cwd(state: State<'_, TerminalManager>, id: u32) -> Option<St
 
 /// 把一次用户输入追加到 JSONL 日志文件。
 ///
-/// 每行一个 JSON 对象:`{"time": <RFC3339 本地时间>, "id": <会话id>, "content": <输入>}`。
-/// 写失败时仅记录告警,不影响终端本身。
-fn append_input_log(path: &std::path::Path, id: u32, content: &str) -> std::io::Result<()> {
+fn append_input_log(path: &std::path::Path, id: u32, content: &str, cwd: &str) -> std::io::Result<()> {
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -360,6 +428,7 @@ fn append_input_log(path: &std::path::Path, id: u32, content: &str) -> std::io::
         "time": chrono::Local::now().to_rfc3339(),
         "id": id,
         "content": content,
+        "cwd": cwd,
     });
     writeln!(file, "{}", line)?;
     file.flush()
@@ -379,6 +448,8 @@ pub struct InputLogEntry {
     time: String,
     id: u32,
     content: String,
+    /// 终端当前工作目录,用于日志展示。
+    cwd: Option<String>,
 }
 
 /// 读取输入日志文件,返回解析后的记录(最新在前)。
@@ -416,6 +487,7 @@ pub fn read_input_log(
                 time: v.get("time")?.as_str()?.to_string(),
                 id: v.get("id")?.as_u64().map(|x| x as u32)?,
                 content: v.get("content")?.as_str()?.to_string(),
+                cwd: v.get("cwd").and_then(|v| v.as_str()).map(String::from),
             })
         })
         .rev()
@@ -437,6 +509,8 @@ pub fn write_terminal(
     id: u32,
     data: String,
 ) -> Result<(), String> {
+    // 输入记录不在此处实现:写入 PTY 只是转发用户输入,
+    // 日志改由读取线程从 shell 输出回显中识别已提交的命令(见 OutputTracker)。
     let mut inner = state.inner.lock().unwrap();
     let session = inner
         .sessions
@@ -450,14 +524,6 @@ pub fn write_terminal(
         .writer
         .flush()
         .map_err(|e| format!("写入失败: {e}"))?;
-
-    // 记录用户输入到本地日志(写入 PTY 成功后追加,失败不影响终端)
-    if let Some(path) = state.log_path.lock().unwrap().clone() {
-        if let Err(e) = append_input_log(&path, id, &data) {
-            log::warn!("写入输入日志失败 ({}): {e}", path.display());
-        }
-    }
-
     Ok(())
 }
 
@@ -596,8 +662,8 @@ mod tests {
         let dir = unique_dir("log");
         let path = dir.join("input_log.jsonl");
 
-        append_input_log(&path, 7, "cd C:\\proj\r").expect("append 1");
-        append_input_log(&path, 7, "ls -la\r").expect("append 2");
+        append_input_log(&path, 7, "cd C:\\proj\r", "C:\\").expect("append 1");
+        append_input_log(&path, 7, "ls -la\r", "C:\\").expect("append 2");
 
         let text = std::fs::read_to_string(&path).expect("read log");
         let lines: Vec<&str> = text.lines().collect();
@@ -620,8 +686,8 @@ mod tests {
         let dir = unique_dir("logread");
         let path = dir.join("input_log.jsonl");
 
-        append_input_log(&path, 1, "first\r").expect("append 1");
-        append_input_log(&path, 1, "second\r").expect("append 2");
+        append_input_log(&path, 1, "first\r", "/tmp").expect("append 1");
+        append_input_log(&path, 1, "second\r", "/tmp").expect("append 2");
         // 混入一行坏数据,读取时应跳过
         std::fs::OpenOptions::new()
             .append(true)
@@ -629,7 +695,7 @@ mod tests {
             .unwrap()
             .write_all(b"not-json\n")
             .unwrap();
-        append_input_log(&path, 2, "third\r").expect("append 3");
+        append_input_log(&path, 2, "third\r", "/tmp").expect("append 3");
 
         let text = std::fs::read_to_string(&path).expect("read log");
         let entries: Vec<serde_json::Value> = text
@@ -646,28 +712,98 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// 提示符文本被 ANSI/网络分块拆开时,tail 应能跨块拼出完整提示符。
+    // ---------- 输出侧命令识别(OutputTracker)测试 ----------
+
+    /// 回显行 `PS <路径>> <命令>` 识别出已提交的命令;输出行/新提示符结束命令。
     #[test]
-    fn parse_tracked_cwd_across_chunks() {
-        let mut tail = String::new();
-        // 初始:启动输出与第一个提示符的前半段
-        assert_eq!(parse_tracked_cwd("Windows PowerShell\r\nPS ", &mut tail), None);
-        // 路径前半
-        assert_eq!(parse_tracked_cwd("C:\\Users\\me\\pr", &mut tail), None);
-        // 路径后半 + 箭头(注意路径在箭头前,直接拼接)
-        assert_eq!(
-            parse_tracked_cwd("oj> ", &mut tail),
-            Some("C:\\Users\\me\\proj".into())
+    fn tracker_records_submitted_command() {
+        let mut t = OutputTracker::new();
+        // 启动 + 初始空提示符:不产生命令
+        assert!(t.push("Windows PowerShell\r\nPS C:\\proj> \r\n").is_empty());
+        // 输入 echo hi 并回车:回显行 + 输出 + 新提示符
+        let rec = t.push("PS C:\\proj> echo hi\r\nhi\r\nPS C:\\proj> \r\n");
+        assert_eq!(rec, vec![("C:\\proj".to_string(), "echo hi".to_string())]);
+    }
+
+    /// 回显行被网络/分块拆开时,跨块仍能拼出完整命令。
+    #[test]
+    fn tracker_across_chunks() {
+        let mut t = OutputTracker::new();
+        assert!(t.push("PS C:\\proj> ech").is_empty());
+        let rec = t.push("o hi\r\nPS C:\\proj> \r\n");
+        assert_eq!(rec, vec![("C:\\proj".to_string(), "echo hi".to_string())]);
+    }
+
+    /// 多行命令:续行 `>> ` 合并进同一条命令。
+    #[test]
+    fn tracker_merges_continuation_lines() {
+        let mut t = OutputTracker::new();
+        let rec = t.push(
+            "PS C:\\proj> foreach ($i in 1..3) {\r\n>> $i\r\n>> }\r\n1\r\n2\r\n3\r\nPS C:\\proj> \r\n",
         );
-        // 同一目录重复出现,结果一致
         assert_eq!(
-            parse_tracked_cwd("\r\nPS C:\\Users\\me\\proj> ", &mut tail),
-            Some("C:\\Users\\me\\proj".into())
+            rec,
+            vec![(
+                "C:\\proj".to_string(),
+                "foreach ($i in 1..3) {\n$i\n}".to_string()
+            )]
         );
-        // 之后 cd 到新目录,解析出新路径
+    }
+
+    /// 命令里的重定向 `>` 不是提示符箭头,保留在命令内。
+    #[test]
+    fn tracker_keeps_redirect_in_command() {
+        let mut t = OutputTracker::new();
+        let rec = t.push("PS C:\\proj> dir > out.txt\r\nPS C:\\proj> \r\n");
+        assert_eq!(rec, vec![("C:\\proj".to_string(), "dir > out.txt".to_string())]);
+    }
+
+    /// 直接回车(空命令)不记录;ANSI 着色回显被剥离。
+    #[test]
+    fn tracker_skips_empty_and_strips_ansi() {
+        let mut t = OutputTracker::new();
+        let rec = t.push(
+            "PS C:\\proj> \r\n\x1b[36mPS C:\\proj\x1b[0m> git status\r\nPS C:\\proj> \r\n",
+        );
+        assert_eq!(rec, vec![("C:\\proj".to_string(), "git status".to_string())]);
+    }
+
+    /// 已消费的行不会重复处理:无新增输出时不再产生命令。
+    #[test]
+    fn tracker_no_duplicate_without_new_output() {
+        let mut t = OutputTracker::new();
+        let chunk = "PS C:\\proj> echo hi\r\nPS C:\\proj> \r\n";
         assert_eq!(
-            parse_tracked_cwd("\r\nPS C:\\Users\\me\\other> ", &mut tail),
-            Some("C:\\Users\\me\\other".into())
+            t.push(chunk),
+            vec![("C:\\proj".to_string(), "echo hi".to_string())]
+        );
+        assert!(t.push("").is_empty());
+    }
+
+    /// cd 命令:记录执行时(旧)目录,新提示符只刷新会话 cwd。
+    #[test]
+    fn tracker_uses_command_time_cwd() {
+        let mut t = OutputTracker::new();
+        let rec = t.push("PS C:\\old> cd ..\r\nPS C:\\new> \r\n");
+        assert_eq!(rec, vec![("C:\\old".to_string(), "cd ..".to_string())]);
+        assert_eq!(t.cwd.as_deref(), Some("C:\\new"));
+    }
+
+    #[test]
+    fn parse_prompt_command_basics() {
+        assert_eq!(
+            parse_prompt_command("PS C:\\x> echo hi"),
+            Some(("C:\\x".to_string(), "echo hi".to_string()))
+        );
+        // 空命令 / 无箭头 / 非提示符行 → None
+        assert_eq!(parse_prompt_command("PS C:\\x> "), None);
+        assert_eq!(parse_prompt_command("PS C:\\x>"), None);
+        assert_eq!(parse_prompt_command("hi"), None);
+        assert_eq!(parse_prompt_command("PS Env:> "), None);
+        // 路径含空格
+        assert_eq!(
+            parse_prompt_command("PS C:\\Program Files\\App> ls"),
+            Some(("C:\\Program Files\\App".to_string(), "ls".to_string()))
         );
     }
 
